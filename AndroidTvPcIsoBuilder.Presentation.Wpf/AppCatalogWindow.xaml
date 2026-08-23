@@ -1,0 +1,108 @@
+<Window x:Class="AndroidTvPcIsoBuilder.Presentation.Wpf.AppCatalogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:vm="clr-namespace:AndroidTvPcIsoBuilder.Presentation.Wpf.ViewModels"
+        mc:Ignorable="d"
+        Title="Ajouter une application du catalogue" Height="560" Width="660" Icon="Assets/app.ico"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{StaticResource Brush.Background}"
+        d:DataContext="{d:DesignInstance Type=vm:AppCatalogViewModel}">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="18" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="18" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- En-tête -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <Border Width="34" Height="34" CornerRadius="9" Background="{StaticResource Brush.MarkGradient}"
+                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" Margin="0,0,12,0">
+                <Path Data="M12 5 L12 19 M5 12 L19 12" Stroke="{StaticResource Brush.Accent}" StrokeThickness="1.8"
+                      Width="15" Height="15" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="Applications disponibles" FontSize="16" FontWeight="Bold" />
+                <TextBlock Text="Catalogue d'applications libres, résolues et téléchargées depuis F-Droid"
+                           Foreground="{StaticResource Brush.TextSecondary}" FontSize="12" Margin="0,2,0,0" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="2" Background="{StaticResource Brush.SurfaceSunken}" BorderBrush="{StaticResource Brush.Border}"
+                BorderThickness="1" CornerRadius="10">
+            <ListBox ItemsSource="{Binding Apps}" SelectedItem="{Binding SelectedApp}" Margin="6"
+                     IsEnabled="{Binding IsDownloading, Converter={StaticResource InverseBooleanConverter}}">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="ItemBorder" Background="Transparent" CornerRadius="8" Margin="0,2"
+                                            BorderThickness="1" BorderBrush="Transparent">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource Brush.Surface}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource Brush.AccentSoft}" />
+                                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="10,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13.5" />
+                                <Border Background="{StaticResource Brush.AccentSoft}" CornerRadius="10" Padding="8,2" Margin="10,0,0,0">
+                                    <TextBlock Text="{Binding Category}" FontSize="10.5" Foreground="{StaticResource Brush.Accent}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{StaticResource Brush.TextSecondary}" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <StackPanel Grid.Row="4">
+            <Border Background="{StaticResource Brush.SurfaceSunken}" BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1" CornerRadius="9" Padding="18" Margin="0,0,0,18"
+                    Visibility="{Binding IsDownloading, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding DownloadPercent, Mode=OneWay}" Height="8" Margin="0,0,0,10" />
+                    <TextBlock Text="{Binding DownloadStatus}" Foreground="{StaticResource Brush.TextSecondary}"
+                               FontFamily="{StaticResource Font.Mono}" FontSize="12" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Annuler" Command="{Binding CancelDownloadCommand}"
+                        Style="{StaticResource Style.Button.Danger}"
+                        IsEnabled="{Binding IsDownloading}" Margin="0,0,8,0" Padding="18,9" />
+                <Button Command="{Binding StartDownloadCommand}"
+                        Style="{StaticResource Style.Button.Primary}"
+                        IsEnabled="{Binding IsDownloading, Converter={StaticResource InverseBooleanConverter}}"
+                        Padding="18,9">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="M12 5 L12 19 M5 12 L19 12" Stroke="#0C1220" StrokeThickness="1.8"
+                              Width="13" Height="13" Stretch="Uniform" Margin="0,0,8,0" />
+                        <TextBlock Text="Ajouter au projet" Foreground="#0C1220" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

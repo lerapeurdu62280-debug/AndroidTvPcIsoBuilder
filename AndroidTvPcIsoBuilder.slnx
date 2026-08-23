@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="AndroidTvPcIsoBuilder.Application/AndroidTvPcIsoBuilder.Application.csproj" />
+  <Project Path="AndroidTvPcIsoBuilder.Domain/AndroidTvPcIsoBuilder.Domain.csproj" />
+  <Project Path="AndroidTvPcIsoBuilder.Infrastructure/AndroidTvPcIsoBuilder.Infrastructure.csproj" />
+  <Project Path="AndroidTvPcIsoBuilder.Presentation.Wpf/AndroidTvPcIsoBuilder.Presentation.Wpf.csproj" />
+  <Project Path="AndroidTvPcIsoBuilder.Tests/AndroidTvPcIsoBuilder.Tests.csproj" />
+</Solution>

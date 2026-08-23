@@ -1,0 +1,18 @@
+﻿<Application x:Class="AndroidTvPcIsoBuilder.Presentation.Wpf.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:AndroidTvPcIsoBuilder.Presentation.Wpf"
+             xmlns:conv="clr-namespace:AndroidTvPcIsoBuilder.Presentation.Wpf.Converters">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <conv:InverseBooleanConverter x:Key="InverseBooleanConverter" />
+            <conv:NullToBooleanConverter x:Key="NullToBooleanConverter" />
+            <conv:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibilityConverter" />
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

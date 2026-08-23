@@ -1,0 +1,71 @@
+using AndroidTvPcIsoBuilder.Application.Common;
+using AndroidTvPcIsoBuilder.Application.Interfaces;
+using AndroidTvPcIsoBuilder.Domain.Entities;
+
+namespace AndroidTvPcIsoBuilder.Application.Validation;
+
+public class ProjectValidator
+{
+    private readonly IFileSystem _fileSystem;
+
+    public ProjectValidator(IFileSystem fileSystem)
+    {
+        _fileSystem = fileSystem;
+    }
+
+    public Result Validate(AndroidTvProject project)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(project.Name))
+            errors.Add("Le nom du projet est requis.");
+
+        if (string.IsNullOrWhiteSpace(project.SourcePath))
+            errors.Add("Le chemin source est requis.");
+        else if (!project.SourcePath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
+            errors.Add("Le chemin source doit pointer vers un fichier .iso.");
+        else if (!_fileSystem.FileExists(project.SourcePath))
+            errors.Add($"Le fichier source '{project.SourcePath}' est introuvable.");
+
+        if (string.IsNullOrWhiteSpace(project.OutputIsoPath))
+            errors.Add("Le chemin de sortie de l'ISO est requis.");
+        else if (!project.OutputIsoPath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
+            errors.Add("Le chemin de sortie doit se terminer par '.iso'.");
+
+        if (!IsValidResolution(project.Resolution))
+            errors.Add($"La résolution '{project.Resolution}' est invalide. Format attendu : LARGEURxHAUTEUR (ex: 1920x1080).");
+
+        foreach (var app in project.Apps)
+        {
+            var appErrors = ValidateApp(app);
+            errors.AddRange(appErrors);
+        }
+
+        return errors.Count == 0 ? Result.Success() : Result.Failure(errors);
+    }
+
+    private List<string> ValidateApp(AppPackage app)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(app.Name))
+            errors.Add("Le nom d'une application est requis.");
+
+        if (string.IsNullOrWhiteSpace(app.SourceApkPath))
+            errors.Add($"Le chemin de l'APK est requis pour l'application '{app.Name}'.");
+        else if (!app.SourceApkPath.EndsWith(".apk", StringComparison.OrdinalIgnoreCase))
+            errors.Add($"Le fichier '{app.SourceApkPath}' n'est pas un APK valide.");
+        else if (!_fileSystem.FileExists(app.SourceApkPath))
+            errors.Add($"L'APK '{app.SourceApkPath}' est introuvable pour l'application '{app.Name}'.");
+
+        return errors;
+    }
+
+    private static bool IsValidResolution(string resolution)
+    {
+        var parts = resolution.Split('x');
+        return parts.Length == 2
+            && int.TryParse(parts[0], out var width) && width > 0
+            && int.TryParse(parts[1], out var height) && height > 0;
+    }
+}
