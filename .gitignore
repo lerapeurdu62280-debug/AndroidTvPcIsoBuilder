@@ -4,3 +4,5 @@ obj/
 .claude/
 *.user
 *.suo
+publish/
+dist/
