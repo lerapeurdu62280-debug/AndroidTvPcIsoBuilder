@@ -1,5 +1,5 @@
 #define MyAppName "AndroidTvPcIsoBuilder"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "S.O.S INFO LUDO"
 #define MyAppExeName "AndroidTvPcIsoBuilder.Presentation.Wpf.exe"
 

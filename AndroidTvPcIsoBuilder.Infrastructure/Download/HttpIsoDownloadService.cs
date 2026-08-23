@@ -21,6 +21,13 @@ public class HttpIsoDownloadService : IIsoDownloadService
             Description: "Build officiel Android-x86, basé sur Android 9 Pie. Compatible PC x86 32 bits plus anciens.",
             DownloadUrl: new Uri("https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86-9.0-r2.iso/download"),
             ApproximateSizeBytes: 965_700_000L),
+
+        new IsoDownloadSource(
+            Id: "lineageos-tv-x86-21.0",
+            DisplayName: "LineageOS TV 21.0 (64 bits)",
+            Description: "Build communautaire LineageOS pour la cible \"x86_64_tv\", avec le vrai launcher Android TV (Leanback) au lieu d'une interface bureau. Basé sur Android 14. Build non officielle (UNOFFICIAL), non signée par l'équipe LineageOS.",
+            DownloadUrl: new Uri("https://sourceforge.net/projects/lineageos-tv-x86/files/lineage-21.0/x86_64_tv/lineage-21.0-20260331-UNOFFICIAL-x86_64_tv-signed.iso/download"),
+            ApproximateSizeBytes: 2_630_580_224L),
     };
 
     private readonly IFileDownloader _fileDownloader;
