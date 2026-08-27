@@ -28,6 +28,13 @@ public class HttpIsoDownloadService : IIsoDownloadService
             Description: "Build communautaire LineageOS pour la cible \"x86_64_tv\", avec le vrai launcher Android TV (Leanback) au lieu d'une interface bureau. Basé sur Android 14. Build non officielle (UNOFFICIAL), non signée par l'équipe LineageOS.",
             DownloadUrl: new Uri("https://sourceforge.net/projects/lineageos-tv-x86/files/lineage-21.0/x86_64_tv/lineage-21.0-20260331-UNOFFICIAL-x86_64_tv-signed.iso/download"),
             ApproximateSizeBytes: 2_630_580_224L),
+
+        new IsoDownloadSource(
+            Id: "googletv-x86-14-v27t",
+            DisplayName: "Google TV 14 (64 bits)",
+            Description: "Build communautaire AndroidTV-x86_64 (MRDTeam), avec la véritable interface Google TV (recommandations, onglets) plutôt que le launcher Android TV classique. Basé sur Android 14. Build non officielle, non affiliée à Google. Aucune build Google TV 16 n'existe encore côté communautaire à ce jour ; le system-image officiel Google (sys-img/google-tv) n'est pas utilisable tel quel car conçu pour l'émulateur (kernel/ramdisk Ranchu, sans bootloader).",
+            DownloadUrl: new Uri("https://sourceforge.net/projects/androidtv-x86-64/files/GTV14/GTV14-x86_64-MRDTeam-V27T-260811.iso/download"),
+            ApproximateSizeBytes: 3_119_212_544L),
     };
 
     private readonly IFileDownloader _fileDownloader;

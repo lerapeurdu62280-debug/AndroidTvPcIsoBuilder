@@ -21,7 +21,7 @@
 | | |
 |---|---|
 | 💿 **Génération d'ISO bootable** | Reconstruit l'image en préservant le catalogue de boot El Torito (BIOS **et/ou** UEFI) et en corrigeant la Boot Info Table ISOLINUX pour garantir un boot réel. |
-| ⬇️ **Téléchargement de base système intégré** | Android‑x86 9.0 (32/64 bits) *ou* **LineageOS TV** (Android 14, launcher **Leanback** natif — la vraie interface Android TV, pas un bureau). |
+| ⬇️ **Téléchargement de base système intégré** | Android‑x86 9.0 (32/64 bits), **LineageOS TV** (Android 14, launcher **Leanback** natif) *ou* **Google TV** (Android 14, interface Google TV avec recommandations — build communautaire AndroidTV-x86_64/MRDTeam). |
 | 📦 **Injection d'applications** | Glissez-déposez des APK, ils sont embarqués directement dans l'image générée. |
 | 🧩 **Catalogue d'apps intégré** | 36 applications prêtes à ajouter, résolues dynamiquement via l'**API officielle F-Droid**. |
 | ⚙️ **Modes de boot configurables** | BIOS, UEFI, ou Hybrid — au choix selon la machine cible. |
