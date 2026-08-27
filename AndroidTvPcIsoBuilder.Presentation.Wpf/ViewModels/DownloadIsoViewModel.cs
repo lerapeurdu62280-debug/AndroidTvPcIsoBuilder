@@ -1,3 +1,4 @@
+using System.IO;
 using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Application.Services;
 using AndroidTvPcIsoBuilder.Domain.Entities;
@@ -7,12 +8,17 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace AndroidTvPcIsoBuilder.Presentation.Wpf.ViewModels;
 
+/// <summary>
+/// Les sources ISO sont hébergées sur SourceForge, qui protège désormais ses téléchargements
+/// par un challenge Cloudflare nécessitant l'exécution de JavaScript : un HttpClient classique
+/// reste bloqué indéfiniment ou reçoit une page HTML au lieu du fichier. Le téléchargement est
+/// donc délégué au navigateur système (qui passe le challenge normalement), et l'utilisateur
+/// importe ensuite le fichier obtenu.
+/// </summary>
 public partial class DownloadIsoViewModel : ObservableObject
 {
     private readonly IsoDownloadOrchestrationService _downloadService;
     private readonly IDialogService _dialogService;
-
-    private CancellationTokenSource? _downloadCancellation;
 
     public IReadOnlyList<IsoDownloadSource> Sources { get; }
 
@@ -21,15 +27,6 @@ public partial class DownloadIsoViewModel : ObservableObject
 
     [ObservableProperty]
     private string _destinationPath = string.Empty;
-
-    [ObservableProperty]
-    private bool _isDownloading;
-
-    [ObservableProperty]
-    private int _downloadPercent;
-
-    [ObservableProperty]
-    private string _downloadStatus = string.Empty;
 
     [ObservableProperty]
     private bool _completedSuccessfully;
@@ -43,80 +40,57 @@ public partial class DownloadIsoViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void BrowseDestination()
-    {
-        var fileName = SelectedSource is not null ? $"{SelectedSource.Id}.iso" : "android.iso";
-        var path = _dialogService.PickSaveFile("Enregistrer l'image ISO téléchargée sous", "Image ISO (*.iso)|*.iso", fileName);
-        if (path is not null)
-            DestinationPath = path;
-    }
-
-    [RelayCommand]
-    private async Task StartDownloadAsync()
+    private void OpenDownloadPage()
     {
         if (SelectedSource is null)
         {
-            _dialogService.ShowError("Téléchargement impossible", "Sélectionnez une source à télécharger.");
+            _dialogService.ShowError("Impossible d'ouvrir la page", "Sélectionnez une source à télécharger.");
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(DestinationPath))
-        {
-            _dialogService.ShowError("Téléchargement impossible", "Choisissez un emplacement de destination.");
-            return;
-        }
-
-        IsDownloading = true;
-        CompletedSuccessfully = false;
-        DownloadPercent = 0;
-        DownloadStatus = "Connexion...";
-
-        _downloadCancellation = new CancellationTokenSource();
-        var progress = new Progress<DownloadProgress>(p =>
-        {
-            DownloadPercent = p.PercentComplete ?? 0;
-            DownloadStatus = p.TotalBytes is long total
-                ? $"{FormatBytes(p.BytesReceived)} / {FormatBytes(total)}"
-                : FormatBytes(p.BytesReceived);
-        });
-
-        try
-        {
-            var result = await _downloadService.DownloadAsync(SelectedSource, DestinationPath, progress, _downloadCancellation.Token);
-
-            if (!result.IsSuccess)
-            {
-                _dialogService.ShowError("Échec du téléchargement", string.Join(Environment.NewLine, result.Errors));
-                return;
-            }
-
-            DownloadStatus = "Téléchargement terminé.";
-            CompletedSuccessfully = true;
-        }
-        finally
-        {
-            IsDownloading = false;
-            _downloadCancellation.Dispose();
-            _downloadCancellation = null;
-        }
+        _dialogService.OpenUrlInBrowser(SelectedSource.DownloadUrl);
     }
 
     [RelayCommand]
-    private void CancelDownload()
+    private void ImportDownloadedFile()
     {
-        _downloadCancellation?.Cancel();
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        double value = bytes;
-        string[] units = { "o", "Ko", "Mo", "Go" };
-        var unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
+        if (SelectedSource is null)
         {
-            value /= 1024;
-            unitIndex++;
+            _dialogService.ShowError("Import impossible", "Sélectionnez une source à télécharger.");
+            return;
         }
-        return $"{value:0.#} {units[unitIndex]}";
+
+        var downloadedPath = _dialogService.PickFile(
+            "Sélectionnez le fichier téléchargé depuis le navigateur",
+            "Image ISO ou archive (*.iso;*.zip)|*.iso;*.zip|Tous les fichiers (*.*)|*.*");
+        if (downloadedPath is null)
+            return;
+
+        if (!downloadedPath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
+        {
+            _dialogService.ShowError(
+                "Fichier non pris en charge",
+                "Le fichier sélectionné n'est pas une image ISO. Si l'archive téléchargée est une .zip, extrayez d'abord l'ISO qu'elle contient, puis sélectionnez-la ici.");
+            return;
+        }
+
+        var suggestedName = $"{SelectedSource.Id}.iso";
+        var savePath = _dialogService.PickSaveFile("Enregistrer l'image ISO sous", "Image ISO (*.iso)|*.iso", suggestedName);
+        if (savePath is null)
+            return;
+
+        try
+        {
+            File.Copy(downloadedPath, savePath, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowError("Import impossible", $"Impossible de copier le fichier vers l'emplacement choisi : {ex.Message}");
+            return;
+        }
+
+        DestinationPath = savePath;
+        CompletedSuccessfully = true;
+        _dialogService.ShowInfo("Import terminé", "L'image ISO a bien été importée.");
     }
 }

@@ -74,4 +74,12 @@ public class DialogService : IDialogService
         var result = window.ShowDialog();
         return result == true ? window.ViewModel.DownloadedApkPath : null;
     }
+
+    public void OpenUrlInBrowser(Uri url)
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url.ToString())
+        {
+            UseShellExecute = true
+        });
+    }
 }

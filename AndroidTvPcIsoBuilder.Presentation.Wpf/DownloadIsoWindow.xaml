@@ -5,7 +5,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:AndroidTvPcIsoBuilder.Presentation.Wpf.ViewModels"
         mc:Ignorable="d"
-        Title="Télécharger une image ISO" Height="460" Width="580" Icon="Assets/app.ico"
+        Title="Télécharger une image ISO" Height="500" Width="580" Icon="Assets/app.ico"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="{StaticResource Brush.Background}"
         d:DataContext="{d:DesignInstance Type=vm:DownloadIsoViewModel}">
@@ -29,15 +29,14 @@
             </Border>
             <StackPanel VerticalAlignment="Center">
                 <TextBlock Text="Télécharger une image Android TV" FontSize="16" FontWeight="Bold" />
-                <TextBlock Text="Une image ISO officielle, prête à servir de base à un projet"
-                           Foreground="{StaticResource Brush.TextSecondary}" FontSize="12" Margin="0,2,0,0" />
+                <TextBlock Text="Le téléchargement se fait via votre navigateur, puis vous importez le fichier ici"
+                           Foreground="{StaticResource Brush.TextSecondary}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </StackPanel>
 
         <StackPanel Grid.Row="2">
             <Label Content="Source" />
-            <ComboBox ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}"
-                      IsEnabled="{Binding IsDownloading, Converter={StaticResource InverseBooleanConverter}}">
+            <ComboBox ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}">
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding DisplayName}" />
@@ -49,42 +48,31 @@
         </StackPanel>
 
         <StackPanel Grid.Row="4">
-            <Label Content="Enregistrer sous" />
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Parcourir..." Command="{Binding BrowseDestinationCommand}"
-                        IsEnabled="{Binding IsDownloading, Converter={StaticResource InverseBooleanConverter}}"
-                        Margin="8,0,0,0" />
-                <TextBox Text="{Binding DestinationPath, UpdateSourceTrigger=PropertyChanged}"
-                         IsReadOnly="True" />
-            </DockPanel>
+            <Border Background="{StaticResource Brush.SurfaceSunken}" BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1" CornerRadius="9" Padding="18">
+                <StackPanel>
+                    <TextBlock Text="1. Ouvrez la page de téléchargement dans votre navigateur, et enregistrez le fichier."
+                               TextWrapping="Wrap" Margin="0,0,0,10" />
+                    <Button Content="Ouvrir la page de téléchargement" Command="{Binding OpenDownloadPageCommand}"
+                            HorizontalAlignment="Left" Padding="14,8" Margin="0,0,0,16" />
+
+                    <TextBlock Text="2. Une fois le téléchargement terminé, importez le fichier ici (si c'est une archive .zip, extrayez d'abord l'ISO qu'elle contient)."
+                               TextWrapping="Wrap" Margin="0,0,0,10" />
+                    <Button Content="Importer le fichier téléchargé" Command="{Binding ImportDownloadedFileCommand}"
+                            Style="{StaticResource Style.Button.Primary}" HorizontalAlignment="Left" Padding="14,8">
+                        <Button.Foreground>
+                            <SolidColorBrush Color="#0C1220" />
+                        </Button.Foreground>
+                    </Button>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <StackPanel Grid.Row="6" VerticalAlignment="Bottom">
-            <Border Background="{StaticResource Brush.SurfaceSunken}" BorderBrush="{StaticResource Brush.Border}"
-                    BorderThickness="1" CornerRadius="9" Padding="18" Margin="0,0,0,18"
-                    Visibility="{Binding IsDownloading, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <StackPanel>
-                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding DownloadPercent, Mode=OneWay}" Height="8" Margin="0,0,0,10" />
-                    <TextBlock Text="{Binding DownloadStatus}" Foreground="{StaticResource Brush.TextSecondary}"
-                               FontFamily="{StaticResource Font.Mono}" FontSize="12" />
-                </StackPanel>
-            </Border>
-
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Annuler" Command="{Binding CancelDownloadCommand}"
-                        Style="{StaticResource Style.Button.Danger}"
-                        IsEnabled="{Binding IsDownloading}" Margin="0,0,8,0" Padding="18,9" />
-                <Button Command="{Binding StartDownloadCommand}"
-                        Style="{StaticResource Style.Button.Primary}"
-                        IsEnabled="{Binding IsDownloading, Converter={StaticResource InverseBooleanConverter}}"
-                        Padding="18,9">
-                    <StackPanel Orientation="Horizontal">
-                        <Path Data="M12 3 L12 15 M8 11 L12 15 L16 11 M4 21 L20 21" Stroke="#0C1220" StrokeThickness="1.7"
-                              Width="13" Height="13" Stretch="Uniform" Margin="0,0,8,0" />
-                        <TextBlock Text="Télécharger" Foreground="#0C1220" FontWeight="SemiBold" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
+            <TextBlock Text="{Binding DestinationPath}" TextWrapping="Wrap" FontFamily="{StaticResource Font.Mono}"
+                       FontSize="12" Foreground="{StaticResource Brush.TextSecondary}"
+                       Visibility="{Binding CompletedSuccessfully, Converter={StaticResource BooleanToVisibilityConverter}}"
+                       Margin="0,0,0,12" />
         </StackPanel>
     </Grid>
 </Window>

@@ -10,4 +10,5 @@ public interface IDialogService
     bool Confirm(string title, string message);
     string? ShowDownloadIsoDialog();
     string? ShowAppCatalogDialog();
+    void OpenUrlInBrowser(Uri url);
 }
