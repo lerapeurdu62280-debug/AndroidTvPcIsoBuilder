@@ -19,7 +19,7 @@ public class AppPackageServiceTests
         _service = new AppPackageService(_repository, _fileSystem);
 
         var projectService = new ProjectService(_repository);
-        var project = await projectService.CreateProjectAsync("Projet", "C:\\Source", "C:\\Output\\out.iso");
+        var project = await projectService.CreateProjectAsync("Projet", "C:\\Output\\out.iso");
         _projectId = project.Value.Id;
     }
 

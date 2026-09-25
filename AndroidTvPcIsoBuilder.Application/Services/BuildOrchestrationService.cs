@@ -22,8 +22,16 @@ public class BuildOrchestrationService
         _fileSystem = fileSystem;
     }
 
+    /// <summary>
+    /// Assemble l'image ISO finale à partir d'une source ISO officielle déjà téléchargée
+    /// (<paramref name="sourceIsoPath"/>) : injection des APK, des pilotes Wi-Fi/Bluetooth
+    /// déjà résolus localement (<paramref name="resolvedDriverFilePaths"/>) et de la
+    /// bootanimation, puis préservation du boot El Torito d'origine.
+    /// </summary>
     public async Task<Result> BuildAsync(
         Guid projectId,
+        string sourceIsoPath,
+        IReadOnlyList<string>? resolvedDriverFilePaths = null,
         IProgress<BuildProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -35,9 +43,9 @@ public class BuildOrchestrationService
         if (!validation.IsSuccess)
             return validation;
 
-        if (_fileSystem.FileExists(project.SourcePath))
+        if (_fileSystem.FileExists(sourceIsoPath))
         {
-            var requiredSpace = (long)(_fileSystem.GetFileSize(project.SourcePath) * 1.15);
+            var requiredSpace = (long)(_fileSystem.GetFileSize(sourceIsoPath) * 1.15);
             var freeSpace = _fileSystem.GetAvailableFreeSpace(project.OutputIsoPath);
             if (freeSpace < requiredSpace)
             {
@@ -51,7 +59,7 @@ public class BuildOrchestrationService
 
         try
         {
-            await _isoBuilder.BuildAsync(project, progress, cancellationToken);
+            await _isoBuilder.BuildAsync(project, sourceIsoPath, resolvedDriverFilePaths, progress, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -92,7 +100,7 @@ public class BuildOrchestrationService
             : Result<AndroidTvProject>.Failure(validation.Errors);
     }
 
-    public async Task<Result<BuildPreview>> GetPreviewAsync(Guid projectId, CancellationToken cancellationToken = default)
+    public async Task<Result<BuildPreview>> GetPreviewAsync(Guid projectId, string sourceIsoPath, CancellationToken cancellationToken = default)
     {
         var project = await _repository.GetByIdAsync(projectId, cancellationToken);
         if (project is null)
@@ -101,8 +109,8 @@ public class BuildOrchestrationService
         var warnings = new List<string>();
 
         long sourceSize = 0;
-        if (_fileSystem.FileExists(project.SourcePath))
-            sourceSize = _fileSystem.GetFileSize(project.SourcePath);
+        if (_fileSystem.FileExists(sourceIsoPath))
+            sourceSize = _fileSystem.GetFileSize(sourceIsoPath);
         else
             warnings.Add("L'image ISO source est introuvable.");
 

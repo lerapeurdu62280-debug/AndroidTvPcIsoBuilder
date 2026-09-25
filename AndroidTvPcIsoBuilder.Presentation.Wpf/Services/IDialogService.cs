@@ -11,4 +11,5 @@ public interface IDialogService
     string? ShowDownloadIsoDialog();
     string? ShowAppCatalogDialog();
     void OpenUrlInBrowser(Uri url);
+    void ShowBuildWizard();
 }

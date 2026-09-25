@@ -82,4 +82,11 @@ public class DialogService : IDialogService
             UseShellExecute = true
         });
     }
+
+    public void ShowBuildWizard()
+    {
+        var window = (AndroidTvPcIsoBuilder.Presentation.Wpf.Views.BuildWizardWindow)_serviceProvider.GetService(typeof(AndroidTvPcIsoBuilder.Presentation.Wpf.Views.BuildWizardWindow))!;
+        window.Owner = System.Windows.Application.Current.MainWindow;
+        window.Show();
+    }
 }

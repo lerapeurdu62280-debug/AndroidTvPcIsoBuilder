@@ -164,10 +164,10 @@
                                         <Label Content="Nom du projet" />
                                         <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16" />
 
-                                        <Label Content="Image ISO source" />
+                                        <Label Content="Image ISO source (assemblage)" />
                                         <DockPanel Margin="0,0,0,16">
-                                            <Button DockPanel.Dock="Right" Content="Parcourir..." Command="{Binding BrowseSourcePathCommand}" Margin="8,0,0,0" />
-                                            <TextBox Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}" />
+                                            <Button DockPanel.Dock="Right" Content="Parcourir..." Command="{Binding BrowseSourceIsoPathCommand}" Margin="8,0,0,0" />
+                                            <TextBox Text="{Binding SourceIsoPath, UpdateSourceTrigger=PropertyChanged}" />
                                         </DockPanel>
 
                                         <Label Content="Fichier ISO de sortie" />
@@ -184,8 +184,8 @@
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel Grid.Column="0">
-                                                <Label Content="Système de base" />
-                                                <ComboBox ItemsSource="{Binding BaseSystemOptions}" SelectedItem="{Binding BaseSystem}" />
+                                                <Label Content="Version Android TV" />
+                                                <ComboBox ItemsSource="{Binding AndroidVersionOptions}" SelectedItem="{Binding AndroidVersion}" />
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="2">

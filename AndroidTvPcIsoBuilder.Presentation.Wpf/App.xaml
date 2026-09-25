@@ -12,6 +12,10 @@
             <conv:InverseBooleanConverter x:Key="InverseBooleanConverter" />
             <conv:NullToBooleanConverter x:Key="NullToBooleanConverter" />
             <conv:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibilityConverter" />
+            <conv:EnumToBooleanConverter x:Key="EnumToBooleanConverter" />
+            <conv:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
+            <conv:CollectionContainsConverter x:Key="CollectionContainsConverter" />
+            <conv:EqualityToBrushConverter x:Key="EqualityToBrushConverter" />
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>

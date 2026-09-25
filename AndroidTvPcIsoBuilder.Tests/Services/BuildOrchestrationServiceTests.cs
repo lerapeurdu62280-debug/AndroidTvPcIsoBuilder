@@ -21,10 +21,12 @@ public class BuildOrchestrationServiceTests
         _orchestrator = new BuildOrchestrationService(_repository, _isoBuilder, new ProjectValidator(_fileSystem), _fileSystem);
     }
 
+    private const string SourceIsoPath = "C:\\Source\\android.iso";
+
     [TestMethod]
     public async Task BuildAsync_ProjetInexistant_RetourneUnEchecSansAppelerLeBuilder()
     {
-        var result = await _orchestrator.BuildAsync(Guid.NewGuid());
+        var result = await _orchestrator.BuildAsync(Guid.NewGuid(), SourceIsoPath);
 
         Assert.IsFalse(result.IsSuccess);
         Assert.IsFalse(_isoBuilder.WasCalled);
@@ -34,9 +36,10 @@ public class BuildOrchestrationServiceTests
     public async Task BuildAsync_ProjetInvalide_RetourneUnEchecSansAppelerLeBuilder()
     {
         var projectService = new ProjectService(_repository);
-        var project = await projectService.CreateProjectAsync("Projet", "C:\\Source\\Inexistant", "C:\\Output\\out.iso");
+        var project = await projectService.CreateProjectAsync("Projet", "C:\\Output\\out.iso");
+        await projectService.UpdateProjectSettingsAsync(project.Value.Id, outputIsoPath: "C:\\Output\\out.txt");
 
-        var result = await _orchestrator.BuildAsync(project.Value.Id);
+        var result = await _orchestrator.BuildAsync(project.Value.Id, SourceIsoPath);
 
         Assert.IsFalse(result.IsSuccess);
         Assert.IsFalse(_isoBuilder.WasCalled);
@@ -45,11 +48,12 @@ public class BuildOrchestrationServiceTests
     [TestMethod]
     public async Task BuildAsync_ProjetValide_AppelleLeBuilderEtReussit()
     {
-        _fileSystem.AddFile("C:\\Source\\android.iso");
+        _fileSystem.AddFile(SourceIsoPath);
         var projectService = new ProjectService(_repository);
-        var project = await projectService.CreateProjectAsync("Projet", "C:\\Source\\android.iso", "C:\\Output\\out.iso");
+        var project = await projectService.CreateProjectAsync("Projet", "C:\\Output\\out.iso");
+        await projectService.UpdateProjectSettingsAsync(project.Value.Id, sourceIsoLocalPath: SourceIsoPath);
 
-        var result = await _orchestrator.BuildAsync(project.Value.Id);
+        var result = await _orchestrator.BuildAsync(project.Value.Id, SourceIsoPath);
 
         Assert.IsTrue(result.IsSuccess);
         Assert.IsTrue(_isoBuilder.WasCalled);
@@ -58,12 +62,13 @@ public class BuildOrchestrationServiceTests
     [TestMethod]
     public async Task BuildAsync_LeBuilderLeveUneException_RetourneUnEchec()
     {
-        _fileSystem.AddFile("C:\\Source\\android.iso");
+        _fileSystem.AddFile(SourceIsoPath);
         var projectService = new ProjectService(_repository);
-        var project = await projectService.CreateProjectAsync("Projet", "C:\\Source\\android.iso", "C:\\Output\\out.iso");
+        var project = await projectService.CreateProjectAsync("Projet", "C:\\Output\\out.iso");
+        await projectService.UpdateProjectSettingsAsync(project.Value.Id, sourceIsoLocalPath: SourceIsoPath);
         _isoBuilder.ExceptionToThrow = new InvalidOperationException("Erreur disque");
 
-        var result = await _orchestrator.BuildAsync(project.Value.Id);
+        var result = await _orchestrator.BuildAsync(project.Value.Id, SourceIsoPath);
 
         Assert.IsFalse(result.IsSuccess);
         Assert.IsTrue(result.Errors.Any(e => e.Contains("Erreur disque")));
@@ -72,9 +77,10 @@ public class BuildOrchestrationServiceTests
     [TestMethod]
     public async Task PrepareAndValidateAsync_ProjetValide_RetourneLeProjet()
     {
-        _fileSystem.AddFile("C:\\Source\\android.iso");
+        _fileSystem.AddFile(SourceIsoPath);
         var projectService = new ProjectService(_repository);
-        var project = await projectService.CreateProjectAsync("Projet", "C:\\Source\\android.iso", "C:\\Output\\out.iso");
+        var project = await projectService.CreateProjectAsync("Projet", "C:\\Output\\out.iso");
+        await projectService.UpdateProjectSettingsAsync(project.Value.Id, sourceIsoLocalPath: SourceIsoPath);
 
         var result = await _orchestrator.PrepareAndValidateAsync(project.Value.Id);
 

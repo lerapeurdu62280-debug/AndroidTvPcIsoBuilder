@@ -20,7 +20,7 @@ public class ProjectServiceTests
     [TestMethod]
     public async Task CreateProjectAsync_AvecDonneesValides_CreeEtPersisteLeProjet()
     {
-        var result = await _service.CreateProjectAsync("MonProjet", "C:\\Source", "C:\\Output\\out.iso");
+        var result = await _service.CreateProjectAsync("MonProjet", "C:\\Output\\out.iso");
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual("MonProjet", result.Value.Name);
@@ -32,7 +32,7 @@ public class ProjectServiceTests
     [TestMethod]
     public async Task CreateProjectAsync_SansNom_RetourneUnEchec()
     {
-        var result = await _service.CreateProjectAsync("", "C:\\Source", "C:\\Output\\out.iso");
+        var result = await _service.CreateProjectAsync("", "C:\\Output\\out.iso");
 
         Assert.IsFalse(result.IsSuccess);
         Assert.IsTrue(result.Errors.Count > 0);
@@ -49,7 +49,7 @@ public class ProjectServiceTests
     [TestMethod]
     public async Task UpdateProjectSettingsAsync_ModifieUniquementLesChampsFournis()
     {
-        var created = await _service.CreateProjectAsync("Original", "C:\\Source", "C:\\Output\\out.iso");
+        var created = await _service.CreateProjectAsync("Original", "C:\\Output\\out.iso");
 
         var updated = await _service.UpdateProjectSettingsAsync(
             created.Value.Id,
@@ -65,7 +65,7 @@ public class ProjectServiceTests
     [TestMethod]
     public async Task DeleteProjectAsync_ProjetExistant_LeSupprimeDuDepot()
     {
-        var created = await _service.CreateProjectAsync("AEffacer", "C:\\Source", "C:\\Output\\out.iso");
+        var created = await _service.CreateProjectAsync("AEffacer", "C:\\Output\\out.iso");
 
         var result = await _service.DeleteProjectAsync(created.Value.Id);
 
@@ -76,8 +76,8 @@ public class ProjectServiceTests
     [TestMethod]
     public async Task GetAllProjectsAsync_RetourneTousLesProjetsCrees()
     {
-        await _service.CreateProjectAsync("P1", "C:\\Source1", "C:\\Output\\p1.iso");
-        await _service.CreateProjectAsync("P2", "C:\\Source2", "C:\\Output\\p2.iso");
+        await _service.CreateProjectAsync("P1", "C:\\Output\\p1.iso");
+        await _service.CreateProjectAsync("P2", "C:\\Output\\p2.iso");
 
         var all = await _service.GetAllProjectsAsync();
 

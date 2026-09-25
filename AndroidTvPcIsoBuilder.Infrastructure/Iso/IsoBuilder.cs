@@ -16,13 +16,26 @@ namespace AndroidTvPcIsoBuilder.Infrastructure.Iso;
 public class IsoBuilder : IIsoBuilder
 {
     private const string AppsDirectory = "APPS";
+    private const string DriversDirectory = "DRIVERS";
     private const string ManifestFileName = "MANIFEST.JSON";
 
-    public async Task BuildAsync(AndroidTvProject project, IProgress<BuildProgress>? progress = null, CancellationToken cancellationToken = default)
+    private readonly IBootAnimationGenerator _bootAnimationGenerator;
+
+    public IsoBuilder(IBootAnimationGenerator bootAnimationGenerator)
+    {
+        _bootAnimationGenerator = bootAnimationGenerator;
+    }
+
+    public async Task BuildAsync(
+        AndroidTvProject project,
+        string sourceIsoPath,
+        IReadOnlyList<string>? resolvedDriverFilePaths = null,
+        IProgress<BuildProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         progress?.Report(new BuildProgress("Lecture de l'image source", 5));
 
-        await using var sourceStream = File.OpenRead(project.SourcePath);
+        await using var sourceStream = File.OpenRead(sourceIsoPath);
         var reader = new CDReader(sourceStream, joliet: true);
 
         var preserver = new BootCatalogPreserver();
@@ -44,6 +57,14 @@ public class IsoBuilder : IIsoBuilder
             progress?.Report(new BuildProgress("Injection des applications", 60));
 
             AddAppsToImage(builder, project, openStreams);
+
+            progress?.Report(new BuildProgress("Injection des pilotes Wi-Fi/BT", 68));
+
+            AddDriversToImage(builder, resolvedDriverFilePaths, openStreams);
+
+            progress?.Report(new BuildProgress("Injection de l'animation de démarrage", 74));
+
+            await AddBootAnimationToImageAsync(builder, project, openStreams, _bootAnimationGenerator, cancellationToken);
 
             progress?.Report(new BuildProgress("Génération de l'image ISO", 80));
 
@@ -198,6 +219,71 @@ public class IsoBuilder : IIsoBuilder
         var manifestJson = JsonSerializer.Serialize(new { apps = manifestApps }, new JsonSerializerOptions { WriteIndented = true });
         var manifestBytes = System.Text.Encoding.UTF8.GetBytes(manifestJson);
         builder.AddFile($"{AppsDirectory}\\{ManifestFileName}", manifestBytes);
+    }
+
+    /// <summary>
+    /// Dépose les fichiers pilotes/script first-boot déjà résolus localement (voir
+    /// IDriverPackInjector.ResolveDriverFilesAsync) dans /DRIVERS, sur le même modèle
+    /// que AddAppsToImage : aucun accès réseau ici, juste la copie de fichiers déjà
+    /// téléchargés/générés dans un répertoire de staging.
+    /// </summary>
+    private static void AddDriversToImage(CDBuilder builder, IReadOnlyList<string>? resolvedDriverFilePaths, List<Stream> openStreams)
+    {
+        if (resolvedDriverFilePaths is null || resolvedDriverFilePaths.Count == 0)
+            return;
+
+        builder.AddDirectory(DriversDirectory);
+
+        var manifestFiles = new List<object>();
+        foreach (var filePath in resolvedDriverFilePaths)
+        {
+            var fileName = Path.GetFileName(filePath);
+            var fileStream = File.OpenRead(filePath);
+            openStreams.Add(fileStream);
+            builder.AddFile($"{DriversDirectory}\\{fileName}", fileStream);
+
+            manifestFiles.Add(new { fileName });
+        }
+
+        var manifestJson = JsonSerializer.Serialize(new { files = manifestFiles }, new JsonSerializerOptions { WriteIndented = true });
+        var manifestBytes = System.Text.Encoding.UTF8.GetBytes(manifestJson);
+        builder.AddFile($"{DriversDirectory}\\{ManifestFileName}", manifestBytes);
+    }
+
+    /// <summary>
+    /// Génère la bootanimation personnalisée (si activée) et la dépose dans l'image.
+    ///
+    /// EMPLACEMENT PROVISOIRE : dépose à la racine sous /BOOTANIM/bootanimation.zip plutôt
+    /// que l'emplacement standard Android "system/media/bootanimation.zip", qui n'est pas
+    /// garanti directement accessible depuis la racine ISO9660 (system.img est souvent une
+    /// image disque imbriquée sur les distributions Android x86, pas un dossier à plat).
+    /// L'emplacement final réel doit être validé empiriquement sur une vraie image du
+    /// catalogue avant de considérer cette étape comme fonctionnellement complète — voir
+    /// le plan de la Phase 2. En l'état, ce dépôt seul ne remplace PAS l'animation de
+    /// démarrage par défaut tant que ce point n'est pas tranché.
+    /// </summary>
+    private static async Task AddBootAnimationToImageAsync(
+        CDBuilder builder,
+        AndroidTvProject project,
+        List<Stream> openStreams,
+        IBootAnimationGenerator bootAnimationGenerator,
+        CancellationToken cancellationToken)
+    {
+        if (!project.BootAnimation.Enabled)
+            return;
+
+        const string bootAnimationDirectory = "BOOTANIM";
+        const string bootAnimationFileName = "bootanimation.zip";
+
+        var stagingDirectory = Path.Combine(Path.GetTempPath(), "AndroidTvPcIsoBuilder", "BootAnimation");
+        var generateResult = await bootAnimationGenerator.GenerateAsync(project.BootAnimation, stagingDirectory, cancellationToken);
+        if (!generateResult.IsSuccess)
+            return; // Best-effort : une bootanimation manquée ne doit pas faire échouer tout le build.
+
+        builder.AddDirectory(bootAnimationDirectory);
+        var zipStream = File.OpenRead(generateResult.Value);
+        openStreams.Add(zipStream);
+        builder.AddFile($"{bootAnimationDirectory}\\{bootAnimationFileName}", zipStream);
     }
 
     /// <summary>

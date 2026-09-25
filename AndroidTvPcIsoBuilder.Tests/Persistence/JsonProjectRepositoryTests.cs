@@ -27,9 +27,28 @@ public class JsonProjectRepositoryTests
     private static AndroidTvProject CreateProject() => new()
     {
         Name = "Projet Test",
-        SourcePath = "C:\\Source",
         OutputIsoPath = "C:\\Output\\out.iso",
-        BaseSystem = BaseSystemType.LineageOsTvX86,
+        SourceIso = new SourceIsoSelection
+        {
+            SourceId = "lineageos-tv-x86-21.0",
+            DisplayName = "LineageOS TV 21.0 (x86)",
+            LocalPath = "C:\\Sources\\lineageos-tv.iso",
+            Sha256 = "abc123"
+        },
+        BootMode = BootMode.Uefi,
+        BootAnimation = new BootAnimationConfig
+        {
+            Enabled = true,
+            SourceImagePath = "C:\\Logos\\logo.png",
+            FrameRate = 24,
+            DurationSeconds = 5
+        },
+        DriverSelection = new WifiBluetoothDriverSelection
+        {
+            EmbeddedDriverPackEnabled = true,
+            AutoDetectFirstBootEnabled = false,
+            SelectedChipsetVendorIds = { "realtek", "broadcom" }
+        },
         Apps = { new AppPackage { Name = "App1", SourceApkPath = "C:\\Apps\\app1.apk" } }
     };
 
@@ -43,9 +62,23 @@ public class JsonProjectRepositoryTests
 
         Assert.IsNotNull(loaded);
         Assert.AreEqual(project.Name, loaded.Name);
-        Assert.AreEqual(project.BaseSystem, loaded.BaseSystem);
         Assert.AreEqual(1, loaded.Apps.Count);
         Assert.AreEqual("App1", loaded.Apps[0].Name);
+
+        Assert.AreEqual(project.SourceIso.SourceId, loaded.SourceIso.SourceId);
+        Assert.AreEqual(project.SourceIso.DisplayName, loaded.SourceIso.DisplayName);
+        Assert.AreEqual(project.SourceIso.LocalPath, loaded.SourceIso.LocalPath);
+        Assert.AreEqual(project.SourceIso.Sha256, loaded.SourceIso.Sha256);
+        Assert.AreEqual(project.BootMode, loaded.BootMode);
+
+        Assert.AreEqual(project.BootAnimation.Enabled, loaded.BootAnimation.Enabled);
+        Assert.AreEqual(project.BootAnimation.SourceImagePath, loaded.BootAnimation.SourceImagePath);
+        Assert.AreEqual(project.BootAnimation.FrameRate, loaded.BootAnimation.FrameRate);
+        Assert.AreEqual(project.BootAnimation.DurationSeconds, loaded.BootAnimation.DurationSeconds);
+
+        Assert.AreEqual(project.DriverSelection.EmbeddedDriverPackEnabled, loaded.DriverSelection.EmbeddedDriverPackEnabled);
+        Assert.AreEqual(project.DriverSelection.AutoDetectFirstBootEnabled, loaded.DriverSelection.AutoDetectFirstBootEnabled);
+        CollectionAssert.AreEqual(project.DriverSelection.SelectedChipsetVendorIds, loaded.DriverSelection.SelectedChipsetVendorIds);
     }
 
     [TestMethod]

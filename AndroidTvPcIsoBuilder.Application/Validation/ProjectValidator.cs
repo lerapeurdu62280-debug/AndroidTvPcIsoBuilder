@@ -20,12 +20,10 @@ public class ProjectValidator
         if (string.IsNullOrWhiteSpace(project.Name))
             errors.Add("Le nom du projet est requis.");
 
-        if (string.IsNullOrWhiteSpace(project.SourcePath))
-            errors.Add("Le chemin source est requis.");
-        else if (!project.SourcePath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
-            errors.Add("Le chemin source doit pointer vers un fichier .iso.");
-        else if (!_fileSystem.FileExists(project.SourcePath))
-            errors.Add($"Le fichier source '{project.SourcePath}' est introuvable.");
+        if (string.IsNullOrWhiteSpace(project.SourceIso.LocalPath))
+            errors.Add("Aucune image ISO source n'a été téléchargée ou importée.");
+        else if (!_fileSystem.FileExists(project.SourceIso.LocalPath))
+            errors.Add($"L'image ISO source '{project.SourceIso.LocalPath}' est introuvable.");
 
         if (string.IsNullOrWhiteSpace(project.OutputIsoPath))
             errors.Add("Le chemin de sortie de l'ISO est requis.");

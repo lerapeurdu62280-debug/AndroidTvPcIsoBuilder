@@ -25,14 +25,13 @@ public partial class ProjectEditorViewModel : ObservableObject
     public ObservableCollection<AppPackageRow> Apps { get; } = new();
     public ObservableCollection<BuildHistoryEntry> BuildHistory { get; } = new();
 
-    public IReadOnlyList<BaseSystemType> BaseSystemOptions { get; } = Enum.GetValues<BaseSystemType>();
     public IReadOnlyList<BootMode> BootModeOptions { get; } = Enum.GetValues<BootMode>();
 
     [ObservableProperty]
     private string _name = string.Empty;
 
     [ObservableProperty]
-    private string _sourcePath = string.Empty;
+    private string _sourceIsoPath = string.Empty;
 
     [ObservableProperty]
     private string _outputIsoPath = string.Empty;
@@ -42,9 +41,6 @@ public partial class ProjectEditorViewModel : ObservableObject
 
     [ObservableProperty]
     private string _language = "fr-FR";
-
-    [ObservableProperty]
-    private BaseSystemType _baseSystem;
 
     [ObservableProperty]
     private BootMode _bootMode;
@@ -97,12 +93,11 @@ public partial class ProjectEditorViewModel : ObservableObject
 
         var project = result.Value;
         Name = project.Name;
-        SourcePath = project.SourcePath;
         OutputIsoPath = project.OutputIsoPath;
         Resolution = project.Resolution;
         Language = project.Language;
-        BaseSystem = project.BaseSystem;
         BootMode = project.BootMode;
+        SourceIsoPath = project.SourceIso.LocalPath ?? string.Empty;
 
         Apps.Clear();
         foreach (var app in project.Apps)
@@ -126,7 +121,7 @@ public partial class ProjectEditorViewModel : ObservableObject
 
     private async Task RefreshPreviewAsync()
     {
-        var previewResult = await _buildOrchestrationService.GetPreviewAsync(_projectId);
+        var previewResult = await _buildOrchestrationService.GetPreviewAsync(_projectId, SourceIsoPath);
         if (!previewResult.IsSuccess)
         {
             PreviewSummary = string.Empty;
@@ -148,12 +143,11 @@ public partial class ProjectEditorViewModel : ObservableObject
         var result = await _projectService.UpdateProjectSettingsAsync(
             _projectId,
             name: Name,
-            sourcePath: SourcePath,
             outputIsoPath: OutputIsoPath,
             resolution: Resolution,
             language: Language,
-            baseSystem: BaseSystem,
-            bootMode: BootMode);
+            bootMode: BootMode,
+            sourceIsoLocalPath: string.IsNullOrWhiteSpace(SourceIsoPath) ? null : SourceIsoPath);
 
         if (!result.IsSuccess)
         {
@@ -166,11 +160,11 @@ public partial class ProjectEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void BrowseSourcePath()
+    private void BrowseSourceIsoPath()
     {
         var path = _dialogService.PickFile("Sélectionnez l'image ISO source Android TV", "Image ISO (*.iso)|*.iso");
         if (path is not null)
-            SourcePath = path;
+            SourceIsoPath = path;
     }
 
     [RelayCommand]
@@ -255,7 +249,7 @@ public partial class ProjectEditorViewModel : ObservableObject
 
         try
         {
-            var result = await _buildOrchestrationService.BuildAsync(_projectId, progress, _buildCancellation.Token);
+            var result = await _buildOrchestrationService.BuildAsync(_projectId, SourceIsoPath, resolvedDriverFilePaths: null, progress, _buildCancellation.Token);
 
             if (!result.IsSuccess)
             {

@@ -1,5 +1,6 @@
 using AndroidTvPcIsoBuilder.Domain.Entities;
 using AndroidTvPcIsoBuilder.Infrastructure.Iso;
+using AndroidTvPcIsoBuilder.Tests.TestDoubles;
 using DiscUtils.Iso9660;
 
 namespace AndroidTvPcIsoBuilder.Tests.Iso;
@@ -50,10 +51,9 @@ public class IsoBuilderTests
         builder.Build(_sourceIsoPath);
     }
 
-    private static AndroidTvProject CreateProject(string sourcePath, string outputPath) => new()
+    private static AndroidTvProject CreateProject(string outputPath) => new()
     {
         Name = "Mon Projet TV",
-        SourcePath = sourcePath,
         OutputIsoPath = outputPath
     };
 
@@ -61,10 +61,10 @@ public class IsoBuilderTests
     public async Task BuildAsync_ImageSourceSansApps_ProduitUneIsoLisibleAvecLeMemeContenu()
     {
         CreateSourceIsoWithBoot();
-        var project = CreateProject(_sourceIsoPath, _outputIsoPath);
-        var builder = new IsoBuilder();
+        var project = CreateProject(_outputIsoPath);
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
 
-        await builder.BuildAsync(project);
+        await builder.BuildAsync(project, _sourceIsoPath);
 
         Assert.IsTrue(File.Exists(_outputIsoPath));
 
@@ -85,11 +85,11 @@ public class IsoBuilderTests
         var apkPath = Path.Combine(_tempDirectory, "youtube.apk");
         await File.WriteAllBytesAsync(apkPath, new byte[] { 1, 2, 3, 4 });
 
-        var project = CreateProject(_sourceIsoPath, _outputIsoPath);
+        var project = CreateProject(_outputIsoPath);
         project.Apps.Add(new AppPackage { Name = "YouTube", SourceApkPath = apkPath });
 
-        var builder = new IsoBuilder();
-        await builder.BuildAsync(project);
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+        await builder.BuildAsync(project, _sourceIsoPath);
 
         await using var outputStream = File.OpenRead(_outputIsoPath);
         var reader = new CDReader(outputStream, joliet: true);
@@ -107,10 +107,10 @@ public class IsoBuilderTests
     public async Task BuildAsync_PreserveLeCatalogueDeBoot_ImageDeBootIdentiqueEnSortie()
     {
         CreateSourceIsoWithBoot();
-        var project = CreateProject(_sourceIsoPath, _outputIsoPath);
-        var builder = new IsoBuilder();
+        var project = CreateProject(_outputIsoPath);
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
 
-        await builder.BuildAsync(project);
+        await builder.BuildAsync(project, _sourceIsoPath);
 
         var preserver = new BootCatalogPreserver();
 
@@ -131,12 +131,12 @@ public class IsoBuilderTests
     public async Task BuildAsync_RapportelaProgressionJusquATerminaison()
     {
         CreateSourceIsoWithBoot();
-        var project = CreateProject(_sourceIsoPath, _outputIsoPath);
-        var builder = new IsoBuilder();
+        var project = CreateProject(_outputIsoPath);
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
         var reports = new List<int>();
         var progress = new Progress<AndroidTvPcIsoBuilder.Application.Interfaces.BuildProgress>(p => reports.Add(p.PercentComplete));
 
-        await builder.BuildAsync(project, progress);
+        await builder.BuildAsync(project, _sourceIsoPath, progress: progress);
 
         Assert.IsTrue(reports.Count > 0);
         Assert.IsTrue(reports.Max() >= 80);

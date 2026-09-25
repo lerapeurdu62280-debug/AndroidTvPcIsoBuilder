@@ -1,0 +1,295 @@
+<UserControl x:Class="AndroidTvPcIsoBuilder.Presentation.Wpf.Views.LiveBuildView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" d:DesignWidth="1160" d:DesignHeight="760">
+    <UserControl.Resources>
+        <!-- Style d'une ligne du panneau de navigation statique (étapes précédentes/actuelle). -->
+        <Style x:Key="Style.NavStepDone" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="28">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="20" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="20" />
+            <ColumnDefinition Width="300" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ===================== Panneau gauche : navigation + ressources machine ===================== -->
+        <Border Grid.Column="0" Grid.Row="0" Background="{StaticResource Brush.Surface}"
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="12" Padding="18">
+            <StackPanel>
+                <TextBlock Text="ÉTAPES" FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
+                           Foreground="{StaticResource Brush.TextDisabled}" Margin="0,0,0,14" />
+
+                <TextBlock Text="Source ISO &amp; démarrage ✓" Style="{StaticResource Style.NavStepDone}" />
+                <TextBlock Text="Pilotes Wi-Fi/BT ✓" Style="{StaticResource Style.NavStepDone}" />
+                <TextBlock Text="Applications ✓" Style="{StaticResource Style.NavStepDone}" />
+                <TextBlock Text="Compilation en direct" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{StaticResource Brush.AndroidAccent}" Margin="0,0,0,20" />
+
+                <Border BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0" Margin="0,0,0,16" />
+
+                <TextBlock Text="TÉLÉCHARGEMENT" FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
+                           Foreground="{StaticResource Brush.TextDisabled}" Margin="0,0,0,12" />
+
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Vitesse" FontSize="12" Foreground="{StaticResource Brush.TextSecondary}" />
+                    <TextBlock Grid.Column="1" FontFamily="{StaticResource Font.Mono}" FontSize="12"
+                               Text="{Binding DownloadSpeedBytesPerSecond, StringFormat={}{0:0} o/s}" />
+                </Grid>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Reçu" FontSize="12" Foreground="{StaticResource Brush.TextSecondary}" />
+                    <TextBlock Grid.Column="1" FontFamily="{StaticResource Font.Mono}" FontSize="12"
+                               Text="{Binding BytesReceived, StringFormat={}{0:0,0} o}" />
+                </Grid>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Total" FontSize="12" Foreground="{StaticResource Brush.TextSecondary}" />
+                    <TextBlock Grid.Column="1" FontFamily="{StaticResource Font.Mono}" FontSize="12"
+                               Text="{Binding TotalBytes, StringFormat={}{0:0,0} o}" />
+                </Grid>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="ETA" FontSize="12" Foreground="{StaticResource Brush.TextSecondary}" />
+                    <TextBlock Grid.Column="1" FontFamily="{StaticResource Font.Mono}" FontSize="12"
+                               Text="{Binding EtaDisplay}" />
+                </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Temps écoulé" FontSize="12" Foreground="{StaticResource Brush.TextSecondary}" />
+                    <TextBlock Grid.Column="1" FontFamily="{StaticResource Font.Mono}" FontSize="12"
+                               Text="{Binding ElapsedTimeDisplay}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===================== Centre : visualisation live ===================== -->
+        <Border Grid.Column="2" Grid.Row="0" Background="{StaticResource Brush.Surface}"
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="12" Padding="24">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="16" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="Visualisation en direct" FontSize="16" FontWeight="Bold" Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding CurrentMilestoneLabel}" FontSize="12.5"
+                               Foreground="{StaticResource Brush.TextSecondary}" />
+                </StackPanel>
+
+                <!-- "Écran" du device : coins arrondis, clip strict, contenu qui se construit -->
+                <Border Grid.Row="2" x:Name="DeviceScreenBorder" CornerRadius="16" ClipToBounds="True"
+                        Background="{StaticResource Brush.SurfaceSunken}"
+                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                        MaxWidth="640" MaxHeight="420" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="{Binding UnbuiltRowHeight}" />
+                            <RowDefinition Height="{Binding BuiltRowHeight}" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Zone "pas encore construite" : wireframe léger (grille de lignes fines) -->
+                        <Grid Grid.Row="0" Background="{StaticResource Brush.SurfaceSunken}">
+                            <ItemsControl>
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="6" Columns="1" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.Items>
+                                    <Rectangle Height="1" Fill="{StaticResource Brush.Border}" Opacity="0.5" VerticalAlignment="Bottom" />
+                                    <Rectangle Height="1" Fill="{StaticResource Brush.Border}" Opacity="0.5" VerticalAlignment="Bottom" />
+                                    <Rectangle Height="1" Fill="{StaticResource Brush.Border}" Opacity="0.5" VerticalAlignment="Bottom" />
+                                    <Rectangle Height="1" Fill="{StaticResource Brush.Border}" Opacity="0.5" VerticalAlignment="Bottom" />
+                                    <Rectangle Height="1" Fill="{StaticResource Brush.Border}" Opacity="0.5" VerticalAlignment="Bottom" />
+                                    <Rectangle Height="1" Fill="{StaticResource Brush.Border}" Opacity="0.5" VerticalAlignment="Bottom" />
+                                </ItemsControl.Items>
+                            </ItemsControl>
+                            <TextBlock Text="EN CONSTRUCTION..." FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
+                                       Foreground="{StaticResource Brush.TextDisabled}" HorizontalAlignment="Center"
+                                       VerticalAlignment="Top" Margin="0,10,0,0" />
+                        </Grid>
+
+                        <!-- Zone "déjà construite" : UI Android TV simplifiée (launcher factice) -->
+                        <Grid Grid.Row="1" Background="#FF14161D">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="34" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Barre de nav -->
+                            <Border Grid.Row="0" Background="{StaticResource Brush.SurfaceAlt}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
+                                    <Rectangle Width="14" Height="14" Fill="{StaticResource Brush.AndroidAccent}" RadiusX="3" RadiusY="3" Margin="0,0,10,0" />
+                                    <TextBlock Text="Android TV" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Brush.TextPrimary}" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Hero -->
+                            <Border Grid.Row="1" Background="{StaticResource Brush.AndroidAccentSoft}" Height="70" Margin="14,12,14,10" CornerRadius="8" />
+
+                            <!-- Rangée de cartes -->
+                            <ItemsControl Grid.Row="2" Margin="14,0,14,14" VerticalAlignment="Top">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="1" Columns="4" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.Items>
+                                    <Border Background="{StaticResource Brush.Surface}" CornerRadius="6" Height="56" Margin="0,0,8,0" />
+                                    <Border Background="{StaticResource Brush.Surface}" CornerRadius="6" Height="56" Margin="0,0,8,0" />
+                                    <Border Background="{StaticResource Brush.Surface}" CornerRadius="6" Height="56" Margin="0,0,8,0" />
+                                    <Border Background="{StaticResource Brush.Surface}" CornerRadius="6" Height="56" />
+                                </ItemsControl.Items>
+                            </ItemsControl>
+                        </Grid>
+
+                        <!-- Ligne de scan animée : démarrée/arrêtée depuis le code-behind selon IsBuildRunning. -->
+                        <Rectangle x:Name="ScanLine" Grid.RowSpan="2" Height="3" VerticalAlignment="Top"
+                                   Fill="{StaticResource Brush.ScanLine}">
+                            <Rectangle.RenderTransform>
+                                <TranslateTransform x:Name="ScanLineTransform" Y="0" />
+                            </Rectangle.RenderTransform>
+                        </Rectangle>
+
+                        <!-- Overlay pourcentage -->
+                        <TextBlock Grid.RowSpan="2" Text="{Binding OverallPercent, StringFormat={}{0}%}"
+                                   FontFamily="{StaticResource Font.Mono}" FontSize="34" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.TextPrimary}" Opacity="0.85"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ===================== Droite : pipeline + terminal de logs ===================== -->
+        <Grid Grid.Column="4" Grid.Row="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Pipeline de build -->
+            <Border Grid.Row="0" Background="{StaticResource Brush.Surface}"
+                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="PIPELINE DE BUILD" FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
+                               Foreground="{StaticResource Brush.TextDisabled}" Margin="0,0,0,12" />
+                    <ItemsControl ItemsSource="{Binding PipelineSteps}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border x:Name="Marker" Grid.Column="0" Width="16" Height="16" CornerRadius="8"
+                                            BorderThickness="1.5" BorderBrush="{StaticResource Brush.TextDisabled}"
+                                            Background="Transparent" VerticalAlignment="Center" />
+
+                                    <TextBlock x:Name="Label" Grid.Column="2" Text="{Binding Label}" FontSize="12.5"
+                                               Foreground="{StaticResource Brush.TextDisabled}"
+                                               VerticalAlignment="Center" TextWrapping="Wrap" />
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompleted}" Value="True">
+                                        <Setter TargetName="Marker" Property="Background" Value="{StaticResource Brush.AndroidAccent}" />
+                                        <Setter TargetName="Marker" Property="BorderBrush" Value="{StaticResource Brush.AndroidAccent}" />
+                                        <Setter TargetName="Label" Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                        <Setter TargetName="Marker" Property="BorderBrush" Value="{StaticResource Brush.AndroidAccent}" />
+                                        <Setter TargetName="Marker" Property="Background" Value="Transparent" />
+                                        <Setter TargetName="Marker" Property="BorderThickness" Value="2.5" />
+                                        <Setter TargetName="Label" Property="Foreground" Value="{StaticResource Brush.AndroidAccent}" />
+                                        <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Terminal de logs -->
+            <Border Grid.Row="2" Background="{StaticResource Brush.SurfaceSunken}"
+                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="12" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="TERMINAL DE LOGS" FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
+                               Foreground="{StaticResource Brush.TextDisabled}" Margin="16,14,16,10" />
+                    <ListBox Grid.Row="1" x:Name="LogListBox" ItemsSource="{Binding LogLines}"
+                             Background="Transparent" BorderThickness="0" Padding="8,0,8,8"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontFamily="{StaticResource Font.Mono}" FontSize="11"
+                                           Foreground="{StaticResource Brush.TextSecondary}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ===================== Bas : progression globale + annulation ===================== -->
+        <Grid Grid.Column="0" Grid.ColumnSpan="5" Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="70" />
+                <ColumnDefinition Width="20" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ProgressBar Grid.Column="0" Height="10" Minimum="0" Maximum="100"
+                         Value="{Binding OverallPercent, Mode=OneWay}" VerticalAlignment="Center" />
+
+            <TextBlock Grid.Column="1" Text="{Binding OverallPercent, StringFormat={}{0}%}"
+                       FontFamily="{StaticResource Font.Mono}" FontSize="13" VerticalAlignment="Center"
+                       HorizontalAlignment="Right" />
+
+            <Button Grid.Column="3" Content="Annuler le build" Style="{StaticResource Style.Button.Danger}"
+                    Padding="18,10" Command="{Binding CancelBuildCommand}" />
+        </Grid>
+    </Grid>
+</UserControl>

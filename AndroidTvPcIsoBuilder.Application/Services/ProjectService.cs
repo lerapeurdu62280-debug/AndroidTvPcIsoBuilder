@@ -17,16 +17,11 @@ public class ProjectService
 
     public async Task<Result<AndroidTvProject>> CreateProjectAsync(
         string name,
-        string sourcePath,
         string outputIsoPath,
-        BaseSystemType baseSystem = BaseSystemType.AndroidTvX86,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result<AndroidTvProject>.Failure("Le nom du projet est requis.");
-
-        if (string.IsNullOrWhiteSpace(sourcePath))
-            return Result<AndroidTvProject>.Failure("Le chemin source est requis.");
 
         if (string.IsNullOrWhiteSpace(outputIsoPath))
             return Result<AndroidTvProject>.Failure("Le chemin de sortie est requis.");
@@ -34,9 +29,7 @@ public class ProjectService
         var project = new AndroidTvProject
         {
             Name = name,
-            SourcePath = sourcePath,
             OutputIsoPath = outputIsoPath,
-            BaseSystem = baseSystem
         };
 
         await _repository.SaveAsync(project, cancellationToken);
@@ -46,12 +39,11 @@ public class ProjectService
     public async Task<Result<AndroidTvProject>> UpdateProjectSettingsAsync(
         Guid projectId,
         string? name = null,
-        string? sourcePath = null,
         string? outputIsoPath = null,
         string? resolution = null,
         string? language = null,
-        BaseSystemType? baseSystem = null,
         BootMode? bootMode = null,
+        string? sourceIsoLocalPath = null,
         CancellationToken cancellationToken = default)
     {
         var project = await _repository.GetByIdAsync(projectId, cancellationToken);
@@ -59,12 +51,11 @@ public class ProjectService
             return Result<AndroidTvProject>.Failure($"Aucun projet trouvé avec l'identifiant '{projectId}'.");
 
         if (name is not null) project.Name = name;
-        if (sourcePath is not null) project.SourcePath = sourcePath;
         if (outputIsoPath is not null) project.OutputIsoPath = outputIsoPath;
         if (resolution is not null) project.Resolution = resolution;
         if (language is not null) project.Language = language;
-        if (baseSystem is not null) project.BaseSystem = baseSystem.Value;
         if (bootMode is not null) project.BootMode = bootMode.Value;
+        if (sourceIsoLocalPath is not null) project.SourceIso.LocalPath = sourceIsoLocalPath;
 
         await _repository.SaveAsync(project, cancellationToken);
         return Result<AndroidTvProject>.Success(project);

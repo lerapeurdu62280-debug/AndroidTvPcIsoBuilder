@@ -10,7 +10,12 @@ public class FakeIsoBuilder : IIsoBuilder
     public Exception? ExceptionToThrow { get; set; }
     public BuildVerification VerificationResult { get; set; } = new(true, true, 0, 0, 1024, Array.Empty<string>());
 
-    public Task BuildAsync(AndroidTvProject project, IProgress<BuildProgress>? progress = null, CancellationToken cancellationToken = default)
+    public Task BuildAsync(
+        AndroidTvProject project,
+        string sourceIsoPath,
+        IReadOnlyList<string>? resolvedDriverFilePaths = null,
+        IProgress<BuildProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         WasCalled = true;
         if (ExceptionToThrow is not null)

@@ -1,0 +1,116 @@
+#!/system/bin/sh
+# first-boot-detect.sh
+#
+# Script de détection automatique du chipset Wi-Fi/Bluetooth au premier démarrage.
+# Généré à partir de ce template par FirstBootScriptGenerator (substitution de
+# tokens simples, aucune logique conditionnelle côté C# : tout le comportement
+# est ici, en bash).
+#
+# Vendors activés pour ce build (injectés par FirstBootScriptGenerator) :
+# {{SELECTED_VENDORS}}
+SELECTED_VENDORS=({{SELECTED_VENDORS}})
+
+LOG_TAG="[first-boot-detect]"
+
+log() {
+    echo "$LOG_TAG $1"
+}
+
+log "Démarrage de la détection automatique des chipsets Wi-Fi/Bluetooth."
+log "Vendors embarqués pour ce build : ${SELECTED_VENDORS[*]}"
+
+# Table de correspondance vendor:device (USB ou PCI) -> nom de module -> commande modprobe.
+# Format de chaque entrée : "vendor_id:device_id|module_name"
+# Complétée au fil de l'ajout de nouveaux chipsets supportés par le catalogue de pilotes.
+DRIVER_TABLE=(
+    # Realtek (USB et PCI)
+    "10ec:8188|rtw88_8188ee"
+    "10ec:8192|rtw88_8192ee"
+    "10ec:c822|rtw88_8821ce"
+    "10ec:b852|rtw89_8852be"
+    # Broadcom
+    "14e4:43ec|brcmfmac"
+    "14e4:4360|brcmfmac"
+    "14e4:43a3|brcmfmac"
+    # Intel
+    "8086:2723|iwlwifi"
+    "8086:2725|iwlwifi"
+    "8086:24fd|iwlwifi"
+    "8086:3165|iwlwifi"
+    # Atheros / Qualcomm
+    "168c:003e|ath10k_pci"
+    "168c:0042|ath10k_pci"
+)
+
+is_vendor_selected() {
+    local vendor_key="$1"
+    for v in "${SELECTED_VENDORS[@]}"; do
+        if [ "$v" = "$vendor_key" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+module_to_vendor_key() {
+    case "$1" in
+        rtw88_*|rtw89_*) echo "realtek" ;;
+        brcmfmac) echo "broadcom" ;;
+        iwlwifi) echo "intel" ;;
+        ath10k_pci) echo "atheros_qualcomm" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+detect_and_load() {
+    local ids="$1"
+
+    if [ -z "$ids" ]; then
+        log "Aucun identifiant matériel détecté par $2."
+        return
+    fi
+
+    echo "$ids" | while read -r id_pair; do
+        [ -z "$id_pair" ] && continue
+
+        for entry in "${DRIVER_TABLE[@]}"; do
+            key="${entry%%|*}"
+            module="${entry##*|}"
+
+            if [ "$id_pair" = "$key" ]; then
+                vendor_key=$(module_to_vendor_key "$module")
+
+                if is_vendor_selected "$vendor_key"; then
+                    log "Chipset détecté : $id_pair -> module $module (vendor: $vendor_key)."
+                    if command -v modprobe >/dev/null 2>&1; then
+                        modprobe "$module" && log "modprobe $module : OK" || log "modprobe $module : ÉCHEC"
+                    else
+                        insmod "/vendor/lib/modules/${module}.ko" && log "insmod $module : OK" || log "insmod $module : ÉCHEC"
+                    fi
+                else
+                    log "Chipset détecté ($id_pair -> $module) mais vendor '$vendor_key' non sélectionné pour ce build : ignoré."
+                fi
+            fi
+        done
+    done
+}
+
+# --- Détection PCI (lspci) ---
+if command -v lspci >/dev/null 2>&1; then
+    log "Analyse des périphériques PCI (lspci)..."
+    pci_ids=$(lspci -n 2>/dev/null | awk '{print $3}')
+    detect_and_load "$pci_ids" "lspci"
+else
+    log "lspci indisponible sur ce système, détection PCI ignorée."
+fi
+
+# --- Détection USB (lsusb) ---
+if command -v lsusb >/dev/null 2>&1; then
+    log "Analyse des périphériques USB (lsusb)..."
+    usb_ids=$(lsusb 2>/dev/null | sed -n 's/.*ID \([0-9a-f]\{4\}:[0-9a-f]\{4\}\).*/\1/p')
+    detect_and_load "$usb_ids" "lsusb"
+else
+    log "lsusb indisponible sur ce système, détection USB ignorée."
+fi
+
+log "Détection terminée."

@@ -21,6 +21,13 @@
     <!-- Alias conservés pour compatibilité avec le code existant -->
     <SolidColorBrush x:Key="Brush.TextTertiary" Color="#FF666F83" />
 
+    <!-- Accent dédié à la compilation AOSP (vert Android désaturé), distinct de l'accent
+         bleu utilisé pour les actions générales de l'application. -->
+    <SolidColorBrush x:Key="Brush.AndroidAccent" Color="#FF7FBF7F" />
+    <SolidColorBrush x:Key="Brush.AndroidAccentSoft" Color="#297FBF7F" />
+    <SolidColorBrush x:Key="Brush.AndroidAccentHover" Color="#FF9ACF9A" />
+    <SolidColorBrush x:Key="Brush.ScanLine" Color="#807FBF7F" />
+
     <LinearGradientBrush x:Key="Brush.AccentGradient" StartPoint="0,0" EndPoint="0.35,1">
         <GradientStop Color="#FF8FBCFF" Offset="0" />
         <GradientStop Color="#FF6EA8FF" Offset="1" />

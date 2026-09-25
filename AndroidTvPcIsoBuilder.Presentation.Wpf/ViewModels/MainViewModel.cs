@@ -52,7 +52,7 @@ public partial class MainViewModel : ObservableObject
             {
                 Id = project.Id,
                 Name = project.Name,
-                BaseSystem = project.BaseSystem.ToString(),
+                BaseSystem = project.SourceIso.DisplayName ?? "Source ISO non définie",
                 OutputIsoPath = project.OutputIsoPath
             })
             .ToList();
@@ -78,41 +78,13 @@ public partial class MainViewModel : ObservableObject
             SelectedProject = Projects.FirstOrDefault(p => p.Id == previouslySelectedId);
     }
 
+    /// <summary>Ouvre le wizard de création guidée : Accueil -> Source ISO &amp; démarrage -> ...</summary>
     [RelayCommand]
-    private async Task CreateProjectAsync()
-    {
-        var sourcePath = _dialogService.PickFile("Sélectionnez l'image ISO source Android TV", "Image ISO (*.iso)|*.iso");
-        if (sourcePath is null)
-            return;
+    private void CreateProject() => _dialogService.ShowBuildWizard();
 
-        var outputPath = _dialogService.PickSaveFile(
-            "Emplacement de l'ISO à générer",
-            "Image ISO (*.iso)|*.iso",
-            "AndroidTv.iso");
-        if (outputPath is null)
-            return;
-
-        await CreateProjectFromSourceAsync(sourcePath, outputPath);
-    }
-
-    private async Task CreateProjectFromSourceAsync(string sourcePath, string outputPath)
-    {
-        var result = await _projectService.CreateProjectAsync(
-            name: Path.GetFileNameWithoutExtension(sourcePath),
-            sourcePath: sourcePath,
-            outputIsoPath: outputPath,
-            baseSystem: BaseSystemType.AndroidTvX86);
-
-        if (!result.IsSuccess)
-        {
-            _dialogService.ShowError("Création du projet impossible", string.Join(Environment.NewLine, result.Errors));
-            return;
-        }
-
-        await ReloadProjectsAsync();
-        SelectedProject = Projects.FirstOrDefault(p => p.Id == result.Value.Id);
-    }
-
+    // NOTE : raccourci "rapide" de création de projet à partir d'une ISO déjà
+    // téléchargée/importée, sans passer par le wizard complet (pilotes/apps configurés
+    // ensuite depuis l'éditeur de projet classique).
     [RelayCommand]
     private async Task DownloadIsoAsync()
     {
@@ -130,7 +102,18 @@ public partial class MainViewModel : ObservableObject
         if (outputPath is null)
             return;
 
-        await CreateProjectFromSourceAsync(downloadedIsoPath, outputPath);
+        var result = await _projectService.CreateProjectAsync(
+            name: Path.GetFileNameWithoutExtension(outputPath),
+            outputIsoPath: outputPath);
+
+        if (!result.IsSuccess)
+        {
+            _dialogService.ShowError("Création du projet impossible", string.Join(Environment.NewLine, result.Errors));
+            return;
+        }
+
+        await ReloadProjectsAsync();
+        SelectedProject = Projects.FirstOrDefault(p => p.Id == result.Value.Id);
     }
 
     [RelayCommand]
