@@ -83,7 +83,7 @@ public partial class MainViewModel : ObservableObject
     private void CreateProject() => _dialogService.ShowBuildWizard();
 
     // NOTE : raccourci "rapide" de création de projet à partir d'une ISO déjà
-    // téléchargée/importée, sans passer par le wizard complet (pilotes/apps configurés
+    // téléchargée/importée, sans passer par le wizard complet (apps configurées
     // ensuite depuis l'éditeur de projet classique).
     [RelayCommand]
     private async Task DownloadIsoAsync()

@@ -26,7 +26,7 @@
             <TextBlock TextAlignment="Center" TextWrapping="Wrap" FontSize="14"
                        Foreground="{StaticResource Brush.TextSecondary}" Margin="0,0,0,30">
                 À partir d'une image Android TV déjà compilée, piloté de bout en bout : matériel PC compatible (hors Mac),
-                pilotes Wi-Fi &amp; Bluetooth intégrés, logo de démarrage personnalisé, image finale prête à graver.
+                applications pré-installées, logo de démarrage personnalisé, image finale prête à graver.
             </TextBlock>
 
             <Button Content="Nouveau projet ISO" Style="{StaticResource Style.Button.Primary}"
@@ -34,11 +34,9 @@
                     Command="{Binding StartCommand}" />
         </StackPanel>
 
-        <!-- 4 étapes du parcours -->
+        <!-- 3 étapes du parcours -->
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="16" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="16" />
                 <ColumnDefinition Width="*" />
@@ -62,8 +60,8 @@
                 <StackPanel>
                     <TextBlock Text="ÉTAPE 02" FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
                                Foreground="{StaticResource Brush.TextDisabled}" Margin="0,0,0,8" />
-                    <TextBlock Text="Pilotes Wi-Fi &amp; Bluetooth" FontWeight="SemiBold" FontSize="13.5" Margin="0,0,0,6" />
-                    <TextBlock Text="Pack générique embarqué + détection automatique au premier démarrage."
+                    <TextBlock Text="Applications" FontWeight="SemiBold" FontSize="13.5" Margin="0,0,0,6" />
+                    <TextBlock Text="Catalogue F-Droid ou APK glisser-déposer, embarqués dans l'image."
                                FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}" />
                 </StackPanel>
             </Border>
@@ -72,17 +70,6 @@
                     BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="12" Padding="18">
                 <StackPanel>
                     <TextBlock Text="ÉTAPE 03" FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
-                               Foreground="{StaticResource Brush.TextDisabled}" Margin="0,0,0,8" />
-                    <TextBlock Text="Applications" FontWeight="SemiBold" FontSize="13.5" Margin="0,0,0,6" />
-                    <TextBlock Text="Catalogue F-Droid ou APK glisser-déposer, embarqués dans l'image."
-                               FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource Brush.TextSecondary}" />
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="6" Background="{StaticResource Brush.Surface}"
-                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="12" Padding="18">
-                <StackPanel>
-                    <TextBlock Text="ÉTAPE 04" FontFamily="{StaticResource Font.Mono}" FontSize="10.5"
                                Foreground="{StaticResource Brush.TextDisabled}" Margin="0,0,0,8" />
                     <TextBlock Text="Compilation en direct" FontWeight="SemiBold" FontSize="13.5" Margin="0,0,0,6" />
                     <TextBlock Text="Visualisation temps réel : l'image Android TV se construit sous vos yeux."

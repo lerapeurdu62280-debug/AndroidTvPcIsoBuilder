@@ -117,7 +117,7 @@
         <!-- Navigation -->
         <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,20,0,0">
-            <Button Content="Continuer → Pilotes Wi-Fi/BT" Style="{StaticResource Style.Button.Primary}"
+            <Button Content="Continuer → Compilation" Style="{StaticResource Style.Button.Primary}"
                     Padding="20,12" Command="{Binding NextCommand}" />
         </StackPanel>
     </Grid>

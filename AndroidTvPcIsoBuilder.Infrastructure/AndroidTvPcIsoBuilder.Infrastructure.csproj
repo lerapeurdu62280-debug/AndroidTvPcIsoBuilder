@@ -5,7 +5,7 @@
          System.Windows.Media.Imaging (DrawingVisual/RenderTargetBitmap/PngBitmapEncoder)
          pour dessiner et encoder les frames du bootanimation.zip sans ajouter de dépendance
          NuGet lourde (ex. System.Drawing.Common). L'ensemble du projet étant déjà
-         Windows-only (build AOSP piloté depuis WPF, orchestration WSL2/SSH), ce ciblage
+         Windows-only (application WPF), ce ciblage
          n'introduit pas de nouvelle contrainte de portabilité. -->
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
@@ -33,13 +33,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Template de script first-boot (voir FirstBootScriptGenerator) : embarqué comme ressource
+    <!-- Script de démarrage déposé dans /scripts de l'ISO (voir IsoBuilder) : embarqué comme ressource
          pour être lu à l'exécution sans dépendre d'un chemin de fichier sur le disque de sortie.
          WithCulture="false" et LogicalName explicite sont nécessaires car MSBuild interprète sinon
          l'extension ".sh" du nom de fichier comme un code de culture (le Sindhi, "sh") et embarque
          le fichier dans un assembly satellite au lieu de l'assembly principal. -->
-    <EmbeddedResource Include="Assets\Scripts\first-boot-detect.sh.template" WithCulture="false"
-                       LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.first-boot-detect.sh.template" />
+    <EmbeddedResource Include="Assets\Scripts\atvbuilder-boot.sh" WithCulture="false"
+                       LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh" />
   </ItemGroup>
 
 </Project>

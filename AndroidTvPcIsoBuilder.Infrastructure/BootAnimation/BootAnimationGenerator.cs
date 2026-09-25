@@ -65,9 +65,10 @@ public class BootAnimationGenerator : IBootAnimationGenerator
 
             var descPath = Path.Combine(workingDirectory, "desc.txt");
             // Format standard Android bootanimation : "<width> <height> <fps>" puis une ligne
-            // par partie, ici "p <count> <pause> <folder>" avec count=1 (une seule boucle, pas
-            // de répétition infinie) et pause=0 (aucune pause entre les frames de la partie).
-            var descContent = $"{FrameWidth} {FrameHeight} {config.FrameRate}\np 1 0 part0\n";
+            // par partie, ici "p <count> <pause> <folder>" avec count=0 (boucle jusqu'à la fin du
+            // démarrage d'Android, comme l'animation d'origine : avec count=1 l'animation resterait
+            // figée sur sa dernière image si le boot dure plus longtemps qu'elle) et pause=0.
+            var descContent = $"{FrameWidth} {FrameHeight} {config.FrameRate}\np 0 0 part0\n";
             await File.WriteAllTextAsync(descPath, descContent, cancellationToken);
 
             var zipPath = Path.Combine(outputDirectory, "bootanimation.zip");

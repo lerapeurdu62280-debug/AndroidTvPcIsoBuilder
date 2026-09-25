@@ -46,7 +46,7 @@ public class BootAnimationGeneratorTests
         {
             var descContent = await reader.ReadToEndAsync();
             StringAssert.Matches(descContent, new System.Text.RegularExpressions.Regex(@"^\d+ \d+ \d+"));
-            StringAssert.Contains(descContent, "p 1 0 part0");
+            StringAssert.Contains(descContent, "p 0 0 part0");
         }
 
         var pngEntries = archive.Entries.Where(e => e.FullName.StartsWith("part0/") && e.FullName.EndsWith(".png")).ToList();

@@ -16,11 +16,7 @@
         <DataTemplate DataType="{x:Type vm:TargetSelectionViewModel}">
             <views:TargetSelectionView />
         </DataTemplate>
-        <!-- Écran "Pilotes Wi-Fi/Bluetooth" (3e étape), inséré entre Cible et Compilation. -->
-        <DataTemplate DataType="{x:Type vm:DriverSelectionViewModel}">
-            <views:DriverSelectionView />
-        </DataTemplate>
-        <!-- Phase 3 : écran "Compilation en direct" (4e étape). Ajouté en plus des
+        <!-- Phase 3 : écran "Compilation en direct" (3e étape). Ajouté en plus des
              DataTemplate existants ci-dessus, qui restent inchangés. -->
         <DataTemplate DataType="{x:Type vm:LiveBuildViewModel}">
             <views:LiveBuildView />

@@ -7,10 +7,9 @@ namespace AndroidTvPcIsoBuilder.Application.Services;
 
 /// <summary>
 /// Orchestre le flux complet de génération d'une image Android TV à partir d'un projet
-/// déjà configuré (source ISO sélectionnée, pilotes, apps, bootanimation) : récupération
+/// déjà configuré (source ISO sélectionnée, apps, bootanimation) : récupération
 /// de l'ISO source (déjà téléchargée/importée via le sous-dialogue du wizard dans le cas
-/// courant ; retéléchargée ici en filet de sécurité si absente), résolution des pilotes,
-/// puis délégation de l'assemblage et de la vérification à <see cref="BuildOrchestrationService"/>.
+/// courant ; retéléchargée ici en filet de sécurité si absente), puis délégation de l'assemblage et de la vérification à <see cref="BuildOrchestrationService"/>.
 /// Remplace AospBuildOrchestrationService (supprimé) comme point d'entrée pour l'écran
 /// "Compilation en direct" du wizard.
 /// </summary>
@@ -18,18 +17,15 @@ public class IsoAssemblyPipelineService
 {
     private readonly IProjectRepository _repository;
     private readonly IsoDownloadOrchestrationService _downloadService;
-    private readonly IDriverPackInjector _driverPackInjector;
     private readonly BuildOrchestrationService _buildOrchestrationService;
 
     public IsoAssemblyPipelineService(
         IProjectRepository repository,
         IsoDownloadOrchestrationService downloadService,
-        IDriverPackInjector driverPackInjector,
         BuildOrchestrationService buildOrchestrationService)
     {
         _repository = repository;
         _downloadService = downloadService;
-        _driverPackInjector = driverPackInjector;
         _buildOrchestrationService = buildOrchestrationService;
     }
 
@@ -77,19 +73,12 @@ public class IsoAssemblyPipelineService
             await _repository.SaveAsync(project, cancellationToken);
         }
 
-        progress?.Report(new IsoAssemblyProgress(BuildMilestone.DriverInjection, 30, "Résolution des pilotes Wi-Fi/Bluetooth..."));
-
-        var driversResult = await _driverPackInjector.ResolveDriverFilesAsync(project, progress, cancellationToken);
-        if (!driversResult.IsSuccess)
-            return Result.Failure(driversResult.Errors);
-
         var buildProgress = new Progress<BuildProgress>(p =>
             progress?.Report(new IsoAssemblyProgress(BuildMilestone.IsoAssembly, p.PercentComplete, p.Message ?? p.Step)));
 
         return await _buildOrchestrationService.BuildAsync(
             projectId,
             project.SourceIso.LocalPath!,
-            driversResult.Value,
             buildProgress,
             cancellationToken);
     }

@@ -5,7 +5,6 @@ using AndroidTvPcIsoBuilder.Application.Services;
 using AndroidTvPcIsoBuilder.Application.Validation;
 using AndroidTvPcIsoBuilder.Infrastructure.BootAnimation;
 using AndroidTvPcIsoBuilder.Infrastructure.Download;
-using AndroidTvPcIsoBuilder.Infrastructure.Drivers;
 using AndroidTvPcIsoBuilder.Infrastructure.FileSystem;
 using AndroidTvPcIsoBuilder.Infrastructure.Iso;
 using AndroidTvPcIsoBuilder.Infrastructure.Persistence;
@@ -28,7 +27,7 @@ namespace AndroidTvPcIsoBuilder.Presentation.Wpf
             ConfigureServices(services);
             _serviceProvider = services.BuildServiceProvider();
 
-            // Le wizard (Accueil -> Cible -> Pilotes -> Compilation en direct) est désormais
+            // Le wizard (Accueil -> Cible -> Compilation en direct) est désormais
             // l'écran de démarrage du logiciel. L'ancienne fenêtre de gestion de projets
             // (MainWindow) reste disponible en DI pour un accès ultérieur (ex: liste des
             // projets existants), mais n'est plus affichée au lancement.
@@ -59,17 +58,11 @@ namespace AndroidTvPcIsoBuilder.Presentation.Wpf
             services.AddSingleton<AppPackageService>();
             services.AddSingleton<BuildOrchestrationService>();
 
-            // Pilotes Wi-Fi/Bluetooth : catalogue statique, script de détection first-boot,
-            // résolution des fichiers avant injection dans l'image ISO finale.
-            services.AddSingleton<IDriverCatalogService, StaticDriverCatalogService>();
-            services.AddSingleton<FirstBootScriptGenerator>();
-            services.AddSingleton<IDriverPackInjector, DriverPackInjector>();
-
             // Logo de démarrage animé (bootanimation Android), personnalisable par l'utilisateur.
             services.AddSingleton<IBootAnimationGenerator, BootAnimationGenerator>();
 
             // Pipeline haut niveau de l'écran "Compilation en direct" : téléchargement/import
-            // ISO -> pilotes -> assemblage (BuildOrchestrationService) -> vérification.
+            // ISO -> assemblage (BuildOrchestrationService) -> vérification.
             services.AddSingleton<IsoAssemblyPipelineService>();
 
             services.AddTransient<DownloadIsoViewModel>();
@@ -79,11 +72,10 @@ namespace AndroidTvPcIsoBuilder.Presentation.Wpf
             services.AddSingleton<MainViewModel>();
             services.AddSingleton<MainWindow>();
 
-            // Wizard de création de projet : Accueil -> Cible & source ISO -> Pilotes
-            // Wi-Fi/Bluetooth -> Compilation en direct.
+            // Wizard de création de projet : Accueil -> Cible & source ISO -> Compilation
+            // en direct.
             services.AddTransient<HomeViewModel>();
             services.AddTransient<TargetSelectionViewModel>();
-            services.AddTransient<DriverSelectionViewModel>();
             services.AddTransient<LiveBuildViewModel>();
             services.AddTransient<BuildWizardViewModel>();
             services.AddTransient<BuildWizardWindow>();

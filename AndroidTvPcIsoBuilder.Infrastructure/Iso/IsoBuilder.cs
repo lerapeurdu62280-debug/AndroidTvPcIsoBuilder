@@ -10,14 +10,23 @@ namespace AndroidTvPcIsoBuilder.Infrastructure.Iso;
 
 /// <summary>
 /// Construit l'ISO de sortie à partir de l'image source : copie le contenu tel quel,
-/// dépose les APK sélectionnés dans /apps (installés par un script au premier démarrage,
-/// voir manifest.json), et préserve le catalogue de boot El Torito d'origine (BIOS et/ou UEFI).
+/// dépose les APK sélectionnés dans /APPS et la bootanimation dans /BOOTANIM, ajoute le
+/// script de démarrage /scripts/atvbuilder qui les branche sur le système Android, et
+/// préserve le catalogue de boot El Torito d'origine (BIOS et/ou UEFI).
 /// </summary>
 public class IsoBuilder : IIsoBuilder
 {
     private const string AppsDirectory = "APPS";
-    private const string DriversDirectory = "DRIVERS";
     private const string ManifestFileName = "MANIFEST.JSON";
+
+    /// <summary>
+    /// L'init de l'initrd Android-x86/BlissOS source chaque fichier de /src/scripts/* (racine
+    /// de l'ISO) après le montage du système et avant switch_root. DiscUtils écrit les noms en
+    /// majuscules, que le pilote iso9660 de Linux présente en minuscules : "scripts/atvbuilder" côté Android.
+    /// </summary>
+    private const string BootScriptDirectory = "SCRIPTS";
+    private const string BootScriptFileName = "ATVBUILDER";
+    private const string BootScriptResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh";
 
     private readonly IBootAnimationGenerator _bootAnimationGenerator;
 
@@ -29,7 +38,6 @@ public class IsoBuilder : IIsoBuilder
     public async Task BuildAsync(
         AndroidTvProject project,
         string sourceIsoPath,
-        IReadOnlyList<string>? resolvedDriverFilePaths = null,
         IProgress<BuildProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -58,13 +66,15 @@ public class IsoBuilder : IIsoBuilder
 
             AddAppsToImage(builder, project, openStreams);
 
-            progress?.Report(new BuildProgress("Injection des pilotes Wi-Fi/BT", 68));
+            progress?.Report(new BuildProgress("Injection de l'animation de démarrage", 70));
 
-            AddDriversToImage(builder, resolvedDriverFilePaths, openStreams);
+            var bootAnimationAdded = await AddBootAnimationToImageAsync(builder, project, openStreams, _bootAnimationGenerator, cancellationToken);
 
-            progress?.Report(new BuildProgress("Injection de l'animation de démarrage", 74));
-
-            await AddBootAnimationToImageAsync(builder, project, openStreams, _bootAnimationGenerator, cancellationToken);
+            if (project.Apps.Count > 0 || bootAnimationAdded)
+            {
+                progress?.Report(new BuildProgress("Ajout du script de démarrage", 76));
+                AddBootScriptToImage(builder);
+            }
 
             progress?.Report(new BuildProgress("Génération de l'image ISO", 80));
 
@@ -118,9 +128,12 @@ public class IsoBuilder : IIsoBuilder
             if (!hasBootImage)
                 issues.Add("Aucune image de boot n'a été retrouvée dans l'ISO générée.");
 
+            if (project.Apps.Count > 0 && !reader.FileExists($"{BootScriptDirectory}\\{BootScriptFileName}"))
+                issues.Add("Le script de démarrage qui installe les applications est absent de l'ISO générée.");
+
             foreach (var app in project.Apps)
             {
-                var apkFileName = Path.GetFileName(app.SourceApkPath);
+                var apkFileName = GetApkImageFileName(app.SourceApkPath);
                 if (reader.FileExists($"{AppsDirectory}\\{apkFileName}"))
                     appsFound++;
                 else
@@ -203,7 +216,7 @@ public class IsoBuilder : IIsoBuilder
         var manifestApps = new List<object>();
         foreach (var app in project.Apps)
         {
-            var apkFileName = Path.GetFileName(app.SourceApkPath);
+            var apkFileName = GetApkImageFileName(app.SourceApkPath);
             var apkStream = File.OpenRead(app.SourceApkPath);
             openStreams.Add(apkStream);
             builder.AddFile($"{AppsDirectory}\\{apkFileName}", apkStream);
@@ -222,47 +235,44 @@ public class IsoBuilder : IIsoBuilder
     }
 
     /// <summary>
-    /// Dépose les fichiers pilotes/script first-boot déjà résolus localement (voir
-    /// IDriverPackInjector.ResolveDriverFilesAsync) dans /DRIVERS, sur le même modèle
-    /// que AddAppsToImage : aucun accès réseau ici, juste la copie de fichiers déjà
-    /// téléchargés/générés dans un répertoire de staging.
+    /// Nom de l'APK dans /APPS. Le script de démarrage copie ces fichiers vers
+    /// /system/etc/user_app, que init.sh parcourt avec "for apk in $USER_APPS" : un espace
+    /// dans le nom couperait le chemin en deux. On ne garde donc que [A-Za-z0-9._-], une
+    /// extension ".apk" en minuscules (le script copie "*.apk") et une longueur compatible
+    /// avec la limite Joliet de 64 caractères.
     /// </summary>
-    private static void AddDriversToImage(CDBuilder builder, IReadOnlyList<string>? resolvedDriverFilePaths, List<Stream> openStreams)
+    public static string GetApkImageFileName(string sourceApkPath)
     {
-        if (resolvedDriverFilePaths is null || resolvedDriverFilePaths.Count == 0)
-            return;
+        var baseName = Path.GetFileNameWithoutExtension(sourceApkPath)
+            .Normalize(NormalizationForm.FormD);
 
-        builder.AddDirectory(DriversDirectory);
-
-        var manifestFiles = new List<object>();
-        foreach (var filePath in resolvedDriverFilePaths)
+        var cleaned = new StringBuilder();
+        foreach (var c in baseName)
         {
-            var fileName = Path.GetFileName(filePath);
-            var fileStream = File.OpenRead(filePath);
-            openStreams.Add(fileStream);
-            builder.AddFile($"{DriversDirectory}\\{fileName}", fileStream);
-
-            manifestFiles.Add(new { fileName });
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.NonSpacingMark)
+                continue;
+            cleaned.Append(char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_' ? c : '_');
         }
 
-        var manifestJson = JsonSerializer.Serialize(new { files = manifestFiles }, new JsonSerializerOptions { WriteIndented = true });
-        var manifestBytes = System.Text.Encoding.UTF8.GetBytes(manifestJson);
-        builder.AddFile($"{DriversDirectory}\\{ManifestFileName}", manifestBytes);
+        var name = cleaned.ToString().Trim('_', '.');
+        if (name.Length == 0)
+            name = "app";
+        if (name.Length > 56)
+            name = name[..56];
+
+        return $"{name}.apk";
     }
 
     /// <summary>
-    /// Génère la bootanimation personnalisée (si activée) et la dépose dans l'image.
-    ///
-    /// EMPLACEMENT PROVISOIRE : dépose à la racine sous /BOOTANIM/bootanimation.zip plutôt
-    /// que l'emplacement standard Android "system/media/bootanimation.zip", qui n'est pas
-    /// garanti directement accessible depuis la racine ISO9660 (system.img est souvent une
-    /// image disque imbriquée sur les distributions Android x86, pas un dossier à plat).
-    /// L'emplacement final réel doit être validé empiriquement sur une vraie image du
-    /// catalogue avant de considérer cette étape comme fonctionnellement complète — voir
-    /// le plan de la Phase 2. En l'état, ce dépôt seul ne remplace PAS l'animation de
-    /// démarrage par défaut tant que ce point n'est pas tranché.
+    /// Génère la bootanimation personnalisée (si activée) et la dépose sous
+    /// /BOOTANIM/bootanimation.zip. Elle n'est pas écrite directement dans le système :
+    /// system.img est une image ext4 imbriquée dans system.sfs (squashfs), en lecture seule.
+    /// C'est le script de démarrage (voir <see cref="AddBootScriptToImage"/>) qui la monte
+    /// par-dessus l'animation d'origine (system/product/media/bootanimation.zip sur les bases
+    /// Google TV / LineageOS TV, system/media/bootanimation.zip sur d'autres).
     /// </summary>
-    private static async Task AddBootAnimationToImageAsync(
+    /// <returns><c>true</c> si l'animation a bien été ajoutée à l'image.</returns>
+    private static async Task<bool> AddBootAnimationToImageAsync(
         CDBuilder builder,
         AndroidTvProject project,
         List<Stream> openStreams,
@@ -270,7 +280,7 @@ public class IsoBuilder : IIsoBuilder
         CancellationToken cancellationToken)
     {
         if (!project.BootAnimation.Enabled)
-            return;
+            return false;
 
         const string bootAnimationDirectory = "BOOTANIM";
         const string bootAnimationFileName = "bootanimation.zip";
@@ -278,12 +288,30 @@ public class IsoBuilder : IIsoBuilder
         var stagingDirectory = Path.Combine(Path.GetTempPath(), "AndroidTvPcIsoBuilder", "BootAnimation");
         var generateResult = await bootAnimationGenerator.GenerateAsync(project.BootAnimation, stagingDirectory, cancellationToken);
         if (!generateResult.IsSuccess)
-            return; // Best-effort : une bootanimation manquée ne doit pas faire échouer tout le build.
+            return false; // Best-effort : une bootanimation manquée ne doit pas faire échouer tout le build.
 
         builder.AddDirectory(bootAnimationDirectory);
         var zipStream = File.OpenRead(generateResult.Value);
         openStreams.Add(zipStream);
         builder.AddFile($"{bootAnimationDirectory}\\{bootAnimationFileName}", zipStream);
+        return true;
+    }
+
+    /// <summary>
+    /// Ajoute /scripts/atvbuilder, sourcé par l'init de l'initrd au démarrage : il monte la
+    /// bootanimation et les APK de l'ISO sur le système Android (voir le script lui-même,
+    /// Assets/Scripts/atvbuilder-boot.sh). Les fins de ligne sont forcées en LF, un retour chariot
+    /// cassant l'interprétation du script par le shell busybox.
+    /// </summary>
+    private static void AddBootScriptToImage(CDBuilder builder)
+    {
+        using var resourceStream = typeof(IsoBuilder).Assembly.GetManifestResourceStream(BootScriptResourceName)
+            ?? throw new InvalidOperationException($"Ressource embarquée introuvable : {BootScriptResourceName}");
+        using var resourceReader = new StreamReader(resourceStream, Encoding.UTF8);
+        var script = resourceReader.ReadToEnd().Replace("\r\n", "\n");
+
+        builder.AddDirectory(BootScriptDirectory);
+        builder.AddFile($"{BootScriptDirectory}\\{BootScriptFileName}", new UTF8Encoding(false).GetBytes(script));
     }
 
     /// <summary>

@@ -8,8 +8,8 @@ using CommunityToolkit.Mvvm.Input;
 namespace AndroidTvPcIsoBuilder.Presentation.Wpf.ViewModels;
 
 /// <summary>
-/// Écran "Compilation en direct" (4e étape du wizard) : pilote la génération de l'image
-/// via <see cref="IsoAssemblyPipelineService"/> (téléchargement/import ISO -> pilotes ->
+/// Écran "Compilation en direct" (3e étape du wizard) : pilote la génération de l'image
+/// via <see cref="IsoAssemblyPipelineService"/> (téléchargement/import ISO ->
 /// apps -> bootanimation -> assemblage -> vérification), et alimente la visualisation
 /// live (pipeline d'étapes, terminal de logs, vitesse de téléchargement, pourcentage
 /// global) à partir des <see cref="IsoAssemblyProgress"/> reçus.
@@ -199,7 +199,6 @@ public partial class LiveBuildViewModel : ObservableObject
         BuildMilestone.Downloading => "Téléchargement de l'image ISO",
         BuildMilestone.ChecksumVerification => "Vérification de l'intégrité (SHA256)",
         BuildMilestone.ReadingSourceImage => "Lecture de l'image source",
-        BuildMilestone.DriverInjection => "Injection des pilotes Wi-Fi/Bluetooth",
         BuildMilestone.AppInjection => "Intégration des applications",
         BuildMilestone.BootAnimationInjection => "Personnalisation de l'écran de démarrage",
         BuildMilestone.IsoAssembly => "Assemblage de l'image ISO",

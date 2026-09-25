@@ -35,7 +35,6 @@
                            Foreground="{StaticResource Brush.TextDisabled}" Margin="0,0,0,14" />
 
                 <TextBlock Text="Source ISO &amp; démarrage ✓" Style="{StaticResource Style.NavStepDone}" />
-                <TextBlock Text="Pilotes Wi-Fi/BT ✓" Style="{StaticResource Style.NavStepDone}" />
                 <TextBlock Text="Applications ✓" Style="{StaticResource Style.NavStepDone}" />
                 <TextBlock Text="Compilation en direct" FontSize="13" FontWeight="SemiBold"
                            Foreground="{StaticResource Brush.AndroidAccent}" Margin="0,0,0,20" />

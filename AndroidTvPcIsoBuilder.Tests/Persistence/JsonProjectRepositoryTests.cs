@@ -43,12 +43,6 @@ public class JsonProjectRepositoryTests
             FrameRate = 24,
             DurationSeconds = 5
         },
-        DriverSelection = new WifiBluetoothDriverSelection
-        {
-            EmbeddedDriverPackEnabled = true,
-            AutoDetectFirstBootEnabled = false,
-            SelectedChipsetVendorIds = { "realtek", "broadcom" }
-        },
         Apps = { new AppPackage { Name = "App1", SourceApkPath = "C:\\Apps\\app1.apk" } }
     };
 
@@ -75,10 +69,6 @@ public class JsonProjectRepositoryTests
         Assert.AreEqual(project.BootAnimation.SourceImagePath, loaded.BootAnimation.SourceImagePath);
         Assert.AreEqual(project.BootAnimation.FrameRate, loaded.BootAnimation.FrameRate);
         Assert.AreEqual(project.BootAnimation.DurationSeconds, loaded.BootAnimation.DurationSeconds);
-
-        Assert.AreEqual(project.DriverSelection.EmbeddedDriverPackEnabled, loaded.DriverSelection.EmbeddedDriverPackEnabled);
-        Assert.AreEqual(project.DriverSelection.AutoDetectFirstBootEnabled, loaded.DriverSelection.AutoDetectFirstBootEnabled);
-        CollectionAssert.AreEqual(project.DriverSelection.SelectedChipsetVendorIds, loaded.DriverSelection.SelectedChipsetVendorIds);
     }
 
     [TestMethod]

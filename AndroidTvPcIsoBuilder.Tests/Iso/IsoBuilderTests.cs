@@ -141,4 +141,82 @@ public class IsoBuilderTests
         Assert.IsTrue(reports.Count > 0);
         Assert.IsTrue(reports.Max() >= 80);
     }
+
+    [TestMethod]
+    public async Task BuildAsync_SansAppsNiAnimation_NAjoutePasDeScriptDeDemarrage()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        Assert.IsFalse(reader.DirectoryExists("SCRIPTS"));
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_AvecApps_AjouteLeScriptDeDemarrageAvecFinsDeLigneLf()
+    {
+        CreateSourceIsoWithBoot();
+        var apkPath = Path.Combine(_tempDirectory, "youtube.apk");
+        await File.WriteAllBytesAsync(apkPath, new byte[] { 1, 2, 3, 4 });
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        project.Apps.Add(new AppPackage { Name = "YouTube", SourceApkPath = apkPath });
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+
+        // Vu depuis Linux (initrd), ce fichier apparaît en minuscules : /src/scripts/atvbuilder.
+        Assert.IsTrue(reader.FileExists("SCRIPTS\\ATVBUILDER"));
+
+        using var scriptStream = reader.OpenFile("SCRIPTS\\ATVBUILDER", FileMode.Open);
+        using var scriptReader = new StreamReader(scriptStream);
+        var script = scriptReader.ReadToEnd();
+        Assert.IsFalse(script.Contains('\r'));
+        StringAssert.Contains(script, "system/etc/user_app");
+        StringAssert.Contains(script, "$atvb_src/apps");
+        StringAssert.Contains(script, "$atvb_src/bootanim/bootanimation.zip");
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_AvecAnimationActivee_AjouteLAnimationEtLeScript()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = true;
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        Assert.IsTrue(reader.FileExists("BOOTANIM\\BOOTANIMATION.ZIP"));
+        Assert.IsTrue(reader.FileExists("SCRIPTS\\ATVBUILDER"));
+    }
+
+    [TestMethod]
+    [DataRow(@"C:\Apps\youtube.apk", "youtube.apk")]
+    [DataRow(@"C:\Apps\Mon Appli (v2).APK", "Mon_Appli__v2.apk")]
+    [DataRow(@"C:\Apps\Télé à la carte.apk", "Tele_a_la_carte.apk")]
+    [DataRow(@"C:\Apps\ .apk", "app.apk")]
+    public void GetApkImageFileName_ProduitUnNomSansEspaceAvecExtensionEnMinuscules(string sourcePath, string expected)
+    {
+        Assert.AreEqual(expected, IsoBuilder.GetApkImageFileName(sourcePath));
+    }
+
+    [TestMethod]
+    public void GetApkImageFileName_TronqueLesNomsTropLongsPourJoliet()
+    {
+        var name = IsoBuilder.GetApkImageFileName(@"C:\Apps\" + new string('a', 120) + ".apk");
+
+        Assert.IsTrue(name.Length <= 64);
+        Assert.IsTrue(name.EndsWith(".apk"));
+    }
 }

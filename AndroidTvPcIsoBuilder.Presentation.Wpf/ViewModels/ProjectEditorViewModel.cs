@@ -249,7 +249,7 @@ public partial class ProjectEditorViewModel : ObservableObject
 
         try
         {
-            var result = await _buildOrchestrationService.BuildAsync(_projectId, SourceIsoPath, resolvedDriverFilePaths: null, progress, _buildCancellation.Token);
+            var result = await _buildOrchestrationService.BuildAsync(_projectId, SourceIsoPath, progress, _buildCancellation.Token);
 
             if (!result.IsSuccess)
             {

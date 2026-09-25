@@ -30,7 +30,6 @@ public sealed class PipelineStepRow
     {
         new PipelineStepRow { Label = "Téléchargement de l'image ISO", Milestone = BuildMilestone.Downloading },
         new PipelineStepRow { Label = "Vérification d'intégrité", Milestone = BuildMilestone.ChecksumVerification },
-        new PipelineStepRow { Label = "Injection pilotes Wi-Fi/BT", Milestone = BuildMilestone.DriverInjection },
         new PipelineStepRow { Label = "Intégration des applications", Milestone = BuildMilestone.AppInjection },
         new PipelineStepRow { Label = "Personnalisation du démarrage", Milestone = BuildMilestone.BootAnimationInjection },
         new PipelineStepRow { Label = "Assemblage ISO bootable", Milestone = BuildMilestone.Done },

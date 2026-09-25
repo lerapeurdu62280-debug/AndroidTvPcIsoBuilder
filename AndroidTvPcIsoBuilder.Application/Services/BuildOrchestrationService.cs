@@ -24,14 +24,12 @@ public class BuildOrchestrationService
 
     /// <summary>
     /// Assemble l'image ISO finale à partir d'une source ISO officielle déjà téléchargée
-    /// (<paramref name="sourceIsoPath"/>) : injection des APK, des pilotes Wi-Fi/Bluetooth
-    /// déjà résolus localement (<paramref name="resolvedDriverFilePaths"/>) et de la
+    /// (<paramref name="sourceIsoPath"/>) : injection des APK et de la
     /// bootanimation, puis préservation du boot El Torito d'origine.
     /// </summary>
     public async Task<Result> BuildAsync(
         Guid projectId,
         string sourceIsoPath,
-        IReadOnlyList<string>? resolvedDriverFilePaths = null,
         IProgress<BuildProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -59,7 +57,7 @@ public class BuildOrchestrationService
 
         try
         {
-            await _isoBuilder.BuildAsync(project, sourceIsoPath, resolvedDriverFilePaths, progress, cancellationToken);
+            await _isoBuilder.BuildAsync(project, sourceIsoPath, progress, cancellationToken);
         }
         catch (OperationCanceledException)
         {

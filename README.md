@@ -22,7 +22,8 @@
 |---|---|
 | 💿 **Génération d'ISO bootable** | Reconstruit l'image en préservant le catalogue de boot El Torito (BIOS **et/ou** UEFI) et en corrigeant la Boot Info Table ISOLINUX pour garantir un boot réel. |
 | ⬇️ **Téléchargement de base système intégré** | Android‑x86 9.0 (32/64 bits), **LineageOS TV** (Android 14, launcher **Leanback** natif) *ou* **Google TV** (Android 14, interface Google TV avec recommandations — build communautaire AndroidTV-x86_64/MRDTeam). |
-| 📦 **Injection d'applications** | Glissez-déposez des APK, ils sont embarqués directement dans l'image générée. |
+| 📦 **Injection d'applications** | Glissez-déposez des APK : ils sont embarqués dans l'image et installés automatiquement à la fin du premier démarrage (bases Google TV / LineageOS TV). |
+| 🎬 **Logo de démarrage animé** | Génère une animation de démarrage Android à partir de votre logo et remplace celle d'origine. |
 | 🧩 **Catalogue d'apps intégré** | 36 applications prêtes à ajouter, résolues dynamiquement via l'**API officielle F-Droid**. |
 | ⚙️ **Modes de boot configurables** | BIOS, UEFI, ou Hybrid — au choix selon la machine cible. |
 | ✅ **Vérification post-génération** | Contrôle automatique de l'ISO produite : lisibilité, présence de l'image de boot, apps effectivement embarquées. |
@@ -110,6 +111,22 @@ Le point délicat : ISOLINUX embarque dans son propre binaire de boot (`isolinux
 Pire : lors de la relocalisation du catalogue de boot en fin de disque, c'est une **copie** de l'image qui est réellement chargée par le BIOS — pas le fichier resté dans l'arborescence du système de fichiers. Le patch de la Boot Info Table est donc appliqué **au moment de cette relocalisation**, directement sur les données qui seront effectivement exécutées, avec leur LBA final réel.
 
 Validé par des boots complets en environnement QEMU, jusqu'à l'interface Android pleinement opérationnelle.
+
+</details>
+
+<details>
+<summary><b>Comment les applications et le logo sont branchés sur un système en lecture seule</b></summary>
+
+<br>
+
+Sur ces images, le système Android est un `system.img` (ext4) compressé dans `system.sfs` (squashfs) : impossible d'y écrire sans tout recompresser. Le logiciel s'appuie à la place sur un mécanisme de l'initrd Android-x86/BlissOS : au démarrage, chaque fichier du dossier `scripts/` à la racine de l'ISO est exécuté juste après le montage du système, avant le lancement d'Android.
+
+Le script ajouté (`scripts/atvbuilder`) utilise `mount --bind`, comme l'initrd d'origine, pour :
+
+- remplacer `system/product/media/bootanimation.zip` par l'animation générée (`bootanim/`) ;
+- présenter à la place de `system/etc/user_app/` un dossier en mémoire contenant les APK d'origine et ceux de l'ISO (`apps/`), que `init.sh` installe avec `pm install` à la fin du démarrage.
+
+Les pilotes Wi-Fi/Bluetooth ne sont pas injectés : les images supportées embarquent déjà les modules et firmwares de chacun de leurs noyaux (Intel, Realtek, Broadcom, Atheros/Qualcomm, MediaTek).
 
 </details>
 

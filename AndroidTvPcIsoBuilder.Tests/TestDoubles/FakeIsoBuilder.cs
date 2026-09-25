@@ -13,7 +13,6 @@ public class FakeIsoBuilder : IIsoBuilder
     public Task BuildAsync(
         AndroidTvProject project,
         string sourceIsoPath,
-        IReadOnlyList<string>? resolvedDriverFilePaths = null,
         IProgress<BuildProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {

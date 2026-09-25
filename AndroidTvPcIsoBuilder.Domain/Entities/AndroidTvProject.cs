@@ -7,7 +7,6 @@ public class AndroidTvProject
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string Name { get; set; }
     public SourceIsoSelection SourceIso { get; set; } = new();
-    public WifiBluetoothDriverSelection DriverSelection { get; set; } = new();
     public BootMode BootMode { get; set; } = BootMode.Hybrid;
     public BootAnimationConfig BootAnimation { get; set; } = new();
     public required string OutputIsoPath { get; set; }

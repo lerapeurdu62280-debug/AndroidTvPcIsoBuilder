@@ -8,14 +8,12 @@ public interface IIsoBuilder
     /// <summary>
     /// Construit l'ISO de sortie à partir d'une image source déjà bootable téléchargée
     /// (<paramref name="sourceIsoPath"/>) : copie son contenu, y injecte les APK
-    /// sélectionnés (/APPS), les pilotes Wi-Fi/Bluetooth déjà résolus localement
-    /// (<paramref name="resolvedDriverFilePaths"/>, /DRIVERS) et la bootanimation
-    /// personnalisée si activée, puis préserve le catalogue de boot El Torito d'origine.
+    /// sélectionnés (/APPS), la bootanimation personnalisée si activée (/BOOTANIM) et le
+    /// script de démarrage qui les branche sur le système (/scripts), puis préserve le catalogue de boot El Torito d'origine.
     /// </summary>
     Task BuildAsync(
         AndroidTvProject project,
         string sourceIsoPath,
-        IReadOnlyList<string>? resolvedDriverFilePaths = null,
         IProgress<BuildProgress>? progress = null,
         CancellationToken cancellationToken = default);
 
