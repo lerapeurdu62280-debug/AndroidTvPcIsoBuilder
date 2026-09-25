@@ -40,6 +40,9 @@
          le fichier dans un assembly satellite au lieu de l'assembly principal. -->
     <EmbeddedResource Include="Assets\Scripts\atvbuilder-boot.sh" WithCulture="false"
                        LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh" />
+    <!-- Logo par défaut de l'animation de démarrage (voir BootAnimationGenerator). -->
+    <EmbeddedResource Include="Assets\BootAnimation\androidtv-logo.png"
+                       LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.BootAnimation.androidtv-logo.png" />
   </ItemGroup>
 
 </Project>

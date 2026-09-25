@@ -27,8 +27,7 @@ public class BootAnimationGeneratorTests
     public async Task GenerateAsync_LogoParDefaut_ProduitUnZipAvecDescTxtEtFramesPng()
     {
         var generator = new BootAnimationGenerator();
-        // Pas de SourceImagePath fourni : utilise le logo vectoriel par défaut, ce qui garde
-        // le test simple et rapide (pas de fichier image à préparer).
+        // Pas de SourceImagePath fourni : utilise le logo Android TV embarqué par défaut.
         var config = new BootAnimationConfig { FrameRate = 5, DurationSeconds = 1 };
 
         var result = await generator.GenerateAsync(config, _outputDirectory);
@@ -46,11 +45,45 @@ public class BootAnimationGeneratorTests
         {
             var descContent = await reader.ReadToEndAsync();
             StringAssert.Matches(descContent, new System.Text.RegularExpressions.Regex(@"^\d+ \d+ \d+"));
-            StringAssert.Contains(descContent, "p 0 0 part0");
+            // Intro jouée une fois, puis boucle jusqu'à la fin du démarrage.
+            StringAssert.Contains(descContent, "p 1 0 part0\np 0 0 part1");
         }
 
-        var pngEntries = archive.Entries.Where(e => e.FullName.StartsWith("part0/") && e.FullName.EndsWith(".png")).ToList();
-        Assert.IsTrue(pngEntries.Count > 0, "Le zip doit contenir au moins une frame PNG dans part0/.");
+        Assert.IsTrue(archive.Entries.Any(e => e.FullName.StartsWith("part0/") && e.FullName.EndsWith(".png")), "Frames d'intro manquantes dans part0/.");
+        Assert.IsTrue(archive.Entries.Any(e => e.FullName.StartsWith("part1/") && e.FullName.EndsWith(".png")), "Frames de boucle manquantes dans part1/.");
+    }
+
+    [TestMethod]
+    public async Task GenerateAsync_LogoParDefaut_DessineLeLogoEmbarqueAuCentre()
+    {
+        var generator = new BootAnimationGenerator();
+        var config = new BootAnimationConfig { FrameRate = 2, DurationSeconds = 1 };
+
+        var result = await generator.GenerateAsync(config, _outputDirectory);
+
+        Assert.IsTrue(result.IsSuccess, string.Join(" ", result.Errors));
+        using var archive = ZipFile.OpenRead(result.Value);
+        using var frameStream = new MemoryStream();
+        using (var entryStream = archive.Entries.First(e => e.FullName.StartsWith("part1/")).Open())
+            entryStream.CopyTo(frameStream);
+        frameStream.Position = 0;
+
+        var frame = new System.Windows.Media.Imaging.FormatConvertedBitmap(
+            System.Windows.Media.Imaging.BitmapFrame.Create(frameStream, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad),
+            System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        var stride = frame.PixelWidth * 4;
+        var pixels = new byte[stride * frame.PixelHeight];
+        frame.CopyPixels(pixels, stride, 0);
+
+        int BrightnessAt(int x, int y) => Math.Max(pixels[y * stride + x * 4], Math.Max(pixels[y * stride + x * 4 + 1], pixels[y * stride + x * 4 + 2]));
+
+        // Coins noirs, et du vert franc (tête du robot) un peu au-dessus du centre.
+        Assert.AreEqual(0, BrightnessAt(5, 5));
+        Assert.AreEqual(0, BrightnessAt(frame.PixelWidth - 5, frame.PixelHeight - 5));
+        var head = (y: frame.PixelHeight / 2 - 60, x: frame.PixelWidth / 2);
+        var green = pixels[head.y * stride + head.x * 4 + 1];
+        var red = pixels[head.y * stride + head.x * 4 + 2];
+        Assert.IsTrue(green > 120 && green > red + 40, $"Pixel attendu vert au centre haut, trouvé G={green} R={red}.");
     }
 
     [TestMethod]
@@ -80,7 +113,7 @@ public class BootAnimationGeneratorTests
     }
 
     [TestMethod]
-    public async Task GenerateAsync_NombreDeFramesCorrespondAuFrameRateFoisDuree()
+    public async Task GenerateAsync_IntroDUneSecondeEtBoucleDeLaDureeConfiguree()
     {
         var generator = new BootAnimationGenerator();
         var config = new BootAnimationConfig { FrameRate = 4, DurationSeconds = 2 };
@@ -90,8 +123,9 @@ public class BootAnimationGeneratorTests
         Assert.IsTrue(result.IsSuccess, string.Join(" ", result.Errors));
 
         using var archive = ZipFile.OpenRead(result.Value);
-        var pngEntries = archive.Entries.Where(e => e.FullName.StartsWith("part0/") && e.FullName.EndsWith(".png")).ToList();
+        int CountFrames(string part) => archive.Entries.Count(e => e.FullName.StartsWith(part + "/") && e.FullName.EndsWith(".png"));
 
-        Assert.AreEqual(8, pngEntries.Count);
+        Assert.AreEqual(4, CountFrames("part0")); // 1 seconde d'intro
+        Assert.AreEqual(8, CountFrames("part1")); // FrameRate x DurationSeconds
     }
 }

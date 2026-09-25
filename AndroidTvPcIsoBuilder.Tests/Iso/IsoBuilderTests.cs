@@ -127,6 +127,49 @@ public class IsoBuilderTests
         CollectionAssert.AreEqual(sourceCatalog.BootImages[0].Data, outputCatalog.BootImages[0].Data);
     }
 
+    /// <summary>
+    /// Cas de l'ISO Google TV 14 : le loader ISOLINUX chargé par le BIOS ("No Emulation", seuls
+    /// 4 secteurs de 512 octets déclarés au catalogue) n'est pas retrouvable dans l'arborescence
+    /// par son LBA. Sa taille réelle ne se lit que dans sa Boot Info Table : l'image recopiée doit
+    /// être complète, sinon ISOLINUX ne trouve pas la suite de son code (écran noir au boot).
+    /// </summary>
+    [TestMethod]
+    public async Task BuildAsync_LoaderIsolinuxHorsArborescence_RecopieLeLoaderCompletViaSaBootInfoTable()
+    {
+        const int loaderSize = 8192;
+        var loader = new byte[loaderSize];
+        for (var i = 64; i < loaderSize; i++)
+            loader[i] = (byte)(i * 7 % 251);
+
+        var sourceBuilder = new CDBuilder { UseJoliet = true, VolumeIdentifier = "ANDROIDTV" };
+        sourceBuilder.AddFile("KERNEL", new byte[] { 1, 2, 3 });
+        sourceBuilder.SetBootImage(new MemoryStream(loader), BootDeviceEmulation.NoEmulation, 0);
+        sourceBuilder.Build(_sourceIsoPath);
+
+        // Écrit dans l'ISO source la Boot Info Table telle que mkisofs -boot-info-table la produit.
+        await using (var sourceStream = File.Open(_sourceIsoPath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            var loadRba = new BootCatalogPreserver().ReadBootCatalog(sourceStream)!.BootImages[0].OriginalLba;
+            BitConverter.GetBytes(16).CopyTo(loader, 8);
+            BitConverter.GetBytes(loadRba).CopyTo(loader, 12);
+            BitConverter.GetBytes(loaderSize).CopyTo(loader, 16);
+            sourceStream.Seek((long)loadRba * BootCatalogPreserver.SectorSize, SeekOrigin.Begin);
+            sourceStream.Write(loader);
+        }
+
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        await new IsoBuilder(new FakeBootAnimationGenerator()).BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var bootImage = new BootCatalogPreserver().ReadBootCatalog(outputStream)!.BootImages[0];
+
+        Assert.AreEqual(loaderSize, bootImage.SizeInBytes);
+        Assert.AreEqual(loaderSize, BitConverter.ToInt32(bootImage.Data, 16));
+        Assert.AreEqual(bootImage.OriginalLba, BitConverter.ToInt32(bootImage.Data, 12));
+        CollectionAssert.AreEqual(loader[64..], bootImage.Data[64..]);
+    }
+
     [TestMethod]
     public async Task BuildAsync_RapportelaProgressionJusquATerminaison()
     {

@@ -77,7 +77,9 @@ public class BootCatalogPreserver
                 0x01 => 1200 * 1024, // Diskette 1.2M
                 0x02 => 1440 * 1024, // Diskette 1.44M
                 0x03 => 2880 * 1024, // Diskette 2.88M
-                0x00 => reader is not null ? FindFileSizeAtLba(reader, loadRba) ?? sectorCount512 * 512 : sectorCount512 * 512,
+                0x00 => ReadIsolinuxBootInfoLength(isoStream, loadRba)
+                        ?? (reader is not null ? FindFileSizeAtLba(reader, loadRba) : null)
+                        ?? sectorCount512 * 512,
                 _ => sectorCount512 * 512
             };
             var imageData = ReadBytes(isoStream, loadRba, sizeInBytes);
@@ -148,6 +150,30 @@ public class BootCatalogPreserver
         {
             WriteBytes(targetIsoStream, newLba, data);
         }
+    }
+
+    /// <summary>
+    /// Taille d'un loader ISOLINUX d'après sa propre Boot Info Table (offset 8 : LBA du PVD,
+    /// LBA du fichier, longueur, checksum). Le BIOS ne charge que les premiers secteurs, puis
+    /// ISOLINUX lit lui-même la suite grâce à cette table : c'est donc la source de vérité.
+    /// Plus fiable que <see cref="FindFileSizeAtLba"/> : sur l'ISO Google TV 14, l'image chargée
+    /// au boot (LBA 47) est un exemplaire distinct de l'isolinux.bin visible dans l'arborescence
+    /// Joliet (autre LBA), si bien que la recherche par LBA échoue et tronquait le loader à 2 Ko
+    /// (écran noir au démarrage). La table n'est retenue que si elle désigne bien
+    /// <paramref name="loadRba"/> et le PVD standard (secteur 16).
+    /// </summary>
+    private static int? ReadIsolinuxBootInfoLength(Stream isoStream, int loadRba)
+    {
+        var firstSector = ReadSector(isoStream, loadRba);
+        var pvdLba = BitConverter.ToInt32(firstSector, 8);
+        var fileLba = BitConverter.ToInt32(firstSector, 12);
+        var length = BitConverter.ToInt32(firstSector, 16);
+
+        const int maxLoaderSize = 1024 * 1024;
+        if (pvdLba == VolumeDescriptorStartSector && fileLba == loadRba && length is > 0 and <= maxLoaderSize)
+            return length;
+
+        return null;
     }
 
     /// <summary>

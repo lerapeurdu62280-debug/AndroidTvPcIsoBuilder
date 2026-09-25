@@ -9,9 +9,15 @@ using AndroidTvPcIsoBuilder.Domain.Entities;
 namespace AndroidTvPcIsoBuilder.Infrastructure.BootAnimation;
 
 /// <summary>
-/// Génère un <c>bootanimation.zip</c> Android standard (séquence de PNG numérotées dans
-/// <c>part0/</c> + <c>desc.txt</c>) affichant un logo animé (fade-in + léger pulse d'échelle)
-/// à la place du texte de boot kernel par défaut.
+/// Génère un <c>bootanimation.zip</c> Android standard affichant un logo animé au centre, sur
+/// fond noir, en deux parties (voir desc.txt) :
+/// <list type="bullet">
+/// <item><c>part0</c> : fondu d'entrée (1 seconde), joué une seule fois ;</item>
+/// <item><c>part1</c> : "respiration" du logo (luminosité et échelle qui pulsent doucement),
+/// jouée en boucle jusqu'à la fin du démarrage d'Android.</item>
+/// </list>
+/// Sans image fournie, le logo par défaut est le logo Android TV embarqué
+/// (Assets/BootAnimation/androidtv-logo.png).
 ///
 /// CHOIX TECHNIQUE — rendu des frames : ce projet est déjà une application WPF
 /// (<c>net10.0-windows</c>, <c>UseWPF=true</c>), donc <see cref="System.Windows.Media.Imaging"/>
@@ -26,7 +32,9 @@ public class BootAnimationGenerator : IBootAnimationGenerator
 {
     private const int FrameWidth = 1280;
     private const int FrameHeight = 720;
-    private static readonly Color AndroidAccentColor = Color.FromRgb(0x7F, 0xBF, 0x7F); // Brush.AndroidAccent du thème WPF
+    private const double MaxLogoWidth = 900;
+    private const double MaxLogoHeight = 420;
+    private const string DefaultLogoResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.BootAnimation.androidtv-logo.png";
 
     public async Task<Result<string>> GenerateAsync(BootAnimationConfig config, string outputDirectory, CancellationToken cancellationToken = default)
     {
@@ -35,40 +43,42 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             Directory.CreateDirectory(outputDirectory);
 
             var workingDirectory = Path.Combine(outputDirectory, $"bootanimation-work-{Guid.NewGuid():N}");
-            var partDirectory = Path.Combine(workingDirectory, "part0");
-            Directory.CreateDirectory(partDirectory);
+            var introDirectory = Path.Combine(workingDirectory, "part0");
+            var loopDirectory = Path.Combine(workingDirectory, "part1");
+            Directory.CreateDirectory(introDirectory);
+            Directory.CreateDirectory(loopDirectory);
 
-            var frameCount = Math.Max(1, config.FrameRate * config.DurationSeconds);
-            var fadeInFrameCount = Math.Max(1, frameCount / 4);
+            var logo = !string.IsNullOrWhiteSpace(config.SourceImagePath) && File.Exists(config.SourceImagePath)
+                ? LoadSourceImage(config.SourceImagePath)
+                : LoadDefaultLogo();
 
-            BitmapSource? sourceImage = null;
-            if (!string.IsNullOrWhiteSpace(config.SourceImagePath) && File.Exists(config.SourceImagePath))
-                sourceImage = LoadSourceImage(config.SourceImagePath);
-
-            for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
+            // Fondu d'entrée : opacité 0 -> 1 et échelle 0.95 -> 1.0 sur une seconde.
+            var introFrameCount = Math.Max(1, config.FrameRate);
+            for (var frameIndex = 0; frameIndex < introFrameCount; frameIndex++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var progress = (frameIndex + 1) / (double)introFrameCount;
+                var eased = 1 - Math.Pow(1 - progress, 3);
+                var frame = RenderFrame(logo, eased, 0.95 + 0.05 * eased);
+                await SavePngAsync(frame, Path.Combine(introDirectory, $"{frameIndex:D5}.png"), cancellationToken);
+            }
 
-                var opacity = frameIndex < fadeInFrameCount
-                    ? (frameIndex + 1) / (double)fadeInFrameCount
-                    : 1.0;
-
-                // Pulse simple : échelle 0.95 -> 1.0 sur la durée du fade-in, puis maintien à 1.0.
-                var scale = frameIndex < fadeInFrameCount
-                    ? 0.95 + 0.05 * ((frameIndex + 1) / (double)fadeInFrameCount)
-                    : 1.0;
-
-                var frameBitmap = RenderFrame(sourceImage, opacity, scale);
-                var framePath = Path.Combine(partDirectory, $"{frameIndex:D5}.png");
-                await SavePngAsync(frameBitmap, framePath, cancellationToken);
+            // Respiration : un cycle complet (cosinus) sur DurationSeconds, qui se reboucle sans à-coup.
+            var loopFrameCount = Math.Max(1, config.FrameRate * config.DurationSeconds);
+            for (var frameIndex = 0; frameIndex < loopFrameCount; frameIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var wave = (1 + Math.Cos(2 * Math.PI * frameIndex / loopFrameCount)) / 2; // 1 -> 0 -> 1
+                var frame = RenderFrame(logo, 0.8 + 0.2 * wave, 1.0 + 0.015 * wave);
+                await SavePngAsync(frame, Path.Combine(loopDirectory, $"{frameIndex:D5}.png"), cancellationToken);
             }
 
             var descPath = Path.Combine(workingDirectory, "desc.txt");
-            // Format standard Android bootanimation : "<width> <height> <fps>" puis une ligne
-            // par partie, ici "p <count> <pause> <folder>" avec count=0 (boucle jusqu'à la fin du
-            // démarrage d'Android, comme l'animation d'origine : avec count=1 l'animation resterait
-            // figée sur sa dernière image si le boot dure plus longtemps qu'elle) et pause=0.
-            var descContent = $"{FrameWidth} {FrameHeight} {config.FrameRate}\np 0 0 part0\n";
+            // Format standard Android bootanimation : "<width> <height> <fps>" puis une ligne par
+            // partie "p <count> <pause> <folder>". part0 est jouée une fois (count=1), part1 en
+            // boucle (count=0) jusqu'à la fin du démarrage : un logo figé ou un fondu qui recommence
+            // en boucle donnerait l'impression d'un écran bloqué ou qui clignote.
+            var descContent = $"{FrameWidth} {FrameHeight} {config.FrameRate}\np 1 0 part0\np 0 0 part1\n";
             await File.WriteAllTextAsync(descPath, descContent, cancellationToken);
 
             var zipPath = Path.Combine(outputDirectory, "bootanimation.zip");
@@ -98,12 +108,26 @@ public class BootAnimationGenerator : IBootAnimationGenerator
         return bitmap;
     }
 
+    private static BitmapSource LoadDefaultLogo()
+    {
+        using var stream = typeof(BootAnimationGenerator).Assembly.GetManifestResourceStream(DefaultLogoResourceName)
+            ?? throw new InvalidOperationException($"Ressource embarquée introuvable : {DefaultLogoResourceName}");
+
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        return bitmap;
+    }
+
     /// <summary>
-    /// Dessine une frame sur fond noir : soit l'image source centrée (avec fade-in/pulse),
-    /// soit, à défaut d'image fournie, un logo vectoriel par défaut (rond vert + triangle
-    /// "play") dessiné directement avec <see cref="DrawingContext"/>.
+    /// Dessine une frame : fond noir, logo centré, réduit si besoin pour tenir dans
+    /// <see cref="MaxLogoWidth"/> x <see cref="MaxLogoHeight"/> (jamais agrandi au-delà de sa
+    /// taille d'origine), avec l'opacité et l'échelle de la frame.
     /// </summary>
-    private static RenderTargetBitmap RenderFrame(BitmapSource? sourceImage, double opacity, double scale)
+    private static RenderTargetBitmap RenderFrame(BitmapSource logo, double opacity, double scale)
     {
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen())
@@ -116,19 +140,10 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             context.PushOpacity(opacity);
             context.PushTransform(new ScaleTransform(scale, scale, centerX, centerY));
 
-            if (sourceImage is not null)
-            {
-                const double maxLogoSize = 420;
-                var ratio = Math.Min(maxLogoSize / sourceImage.PixelWidth, maxLogoSize / sourceImage.PixelHeight);
-                var width = sourceImage.PixelWidth * ratio;
-                var height = sourceImage.PixelHeight * ratio;
-                var rect = new Rect(centerX - width / 2, centerY - height / 2, width, height);
-                context.DrawImage(sourceImage, rect);
-            }
-            else
-            {
-                DrawDefaultLogo(context, centerX, centerY);
-            }
+            var ratio = Math.Min(1.0, Math.Min(MaxLogoWidth / logo.PixelWidth, MaxLogoHeight / logo.PixelHeight));
+            var width = logo.PixelWidth * ratio;
+            var height = logo.PixelHeight * ratio;
+            context.DrawImage(logo, new Rect(centerX - width / 2, centerY - height / 2, width, height));
 
             context.Pop(); // ScaleTransform
             context.Pop(); // Opacity
@@ -138,37 +153,6 @@ public class BootAnimationGenerator : IBootAnimationGenerator
         renderTarget.Render(visual);
         renderTarget.Freeze();
         return renderTarget;
-    }
-
-    /// <summary>Logo par défaut : cercle vert (couleur du thème Android) avec un triangle "play" centré.</summary>
-    private static void DrawDefaultLogo(DrawingContext context, double centerX, double centerY)
-    {
-        const double radius = 180;
-        var accentBrush = new SolidColorBrush(AndroidAccentColor);
-        accentBrush.Freeze();
-
-        context.DrawEllipse(accentBrush, null, new Point(centerX, centerY), radius, radius);
-
-        const double triangleHalfHeight = 90;
-        const double triangleWidth = 100;
-        var offsetX = centerX - triangleWidth / 4; // léger décalage pour un rendu visuellement centré
-
-        var trianglePoints = new[]
-        {
-            new Point(offsetX, centerY - triangleHalfHeight),
-            new Point(offsetX, centerY + triangleHalfHeight),
-            new Point(offsetX + triangleWidth, centerY),
-        };
-
-        var figure = new PathFigure { StartPoint = trianglePoints[0], IsClosed = true, IsFilled = true };
-        figure.Segments.Add(new LineSegment(trianglePoints[1], isStroked: true));
-        figure.Segments.Add(new LineSegment(trianglePoints[2], isStroked: true));
-
-        var geometry = new PathGeometry();
-        geometry.Figures.Add(figure);
-        geometry.Freeze();
-
-        context.DrawGeometry(Brushes.Black, null, geometry);
     }
 
     private static async Task SavePngAsync(BitmapSource bitmap, string path, CancellationToken cancellationToken)
