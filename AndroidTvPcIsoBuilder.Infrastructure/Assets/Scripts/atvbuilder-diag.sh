@@ -59,6 +59,26 @@ cat /system/etc/init.sh > $run/init.sh.txt 2>&1
 	echo "== input"; cat /proc/bus/input/devices
 	echo "== firmware wifi"; ls -l /vendor/firmware /system/lib/firmware /lib/firmware 2> /dev/null | grep -i -e iwlwifi -e total
 } > $run/materiel.txt 2>&1
+{
+	echo "== asound cards"; cat /proc/asound/cards
+	echo "== asound pcm"; cat /proc/asound/pcm
+	for e in /proc/asound/card*/eld* /proc/asound/card*/codec*; do
+		[ -f "$e" ] && { echo "== $e"; head -40 "$e"; }
+	done
+	echo "== audio hal"; ls -l /vendor/lib64/hw /system/lib64/hw 2> /dev/null | grep -i audio
+	echo "== audio props"; getprop | grep -i -e audio -e alsa -e hdmi
+	for f in /vendor/etc/audio_policy_configuration.xml /vendor/etc/audio/*.xml /system/etc/audio_policy_configuration.xml; do
+		[ -f "$f" ] && { echo "==== $f"; cat "$f"; }
+	done
+} > $run/son.txt 2>&1
+{
+	echo "== hals"; lshal -i 2> /dev/null | grep -i -e drm -e media -e codec
+	ls -l /vendor/lib64/mediadrm /vendor/lib/mediadrm /system/lib64/mediadrm 2> /dev/null
+	echo "== drm props"; getprop | grep -i -e drm -e widevine -e codec -e media
+	for f in /vendor/etc/media_codecs*.xml /system/etc/media_codecs*.xml /apex/com.android.media.swcodec/etc/*.xml; do
+		[ -f "$f" ] && { echo "==== $f"; cat "$f"; }
+	done
+} > $run/video.txt 2>&1
 for f in /vendor/etc/init/*hwcomposer* /vendor/etc/init/*composer* /vendor/etc/init/*gralloc* \
 	/vendor/etc/init/*wifi* /vendor/etc/init/*supplicant* /system/etc/init/hw/init.*.rc /vendor/etc/init/hw/*.rc; do
 	[ -f "$f" ] && { echo "==== $f"; cat "$f"; }
@@ -82,6 +102,9 @@ snapshot()
 	ps -A -o PID,PPID,USER,NAME,ARGS > $s/ps.txt 2>&1
 	top -b -n 1 -m 25 > $s/top.txt 2>&1
 	ip addr > $s/ip.txt 2>&1
+	dumpsys media.audio_flinger > $s/audioflinger.txt 2>&1
+	dumpsys audio > $s/audio.txt 2>&1
+	dumpsys media.player > $s/mediaplayer.txt 2>&1
 	getprop > $s/getprop.txt 2>&1
 	for d in /sys/kernel/debug/dri/*; do
 		[ -f $d/state ] && cat $d/state > $s/dri-state-${d##*/}.txt 2>&1
