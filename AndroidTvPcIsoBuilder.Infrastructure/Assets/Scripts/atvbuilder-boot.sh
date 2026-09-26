@@ -110,7 +110,7 @@ atvb_apply_system()
 
 	# --- ISO de diagnostic : relevés sur clé USB ----------------------------------
 	# Le script de relevés (diag/atvdiag.sh de l'ISO) devient un service d'init, démarré
-	# en fin de démarrage. Lancé depuis init.sh (bootcomplete), il serait tué avec lui :
+	# dès le déclencheur « boot » (journal continu si Android éteint la machine). Lancé depuis init.sh (bootcomplete), il serait tué avec lui :
 	# init supprime tous les processus d'une commande "exec" quand elle se termine.
 	# Le service et le script sont ajoutés à system/etc/init par une couche overlayfs
 	# (en RAM, /tmp survit au switch_root) ; init lit ce dossier après notre passage.
@@ -127,10 +127,12 @@ atvb_apply_system()
 		    oneshot
 		    disabled
 
+		on boot
+		    start atvdiag
+
 		on property:sys.boot_completed=1
 		    setprop service.adb.tcp.port 5555
 		    setprop persist.adb.tcp.port 5555
-		    start atvdiag
 		ATVB_EOF
 		chmod 644 /tmp/atvb_diag/*
 		if mount -t overlay overlay -o ro,lowerdir=/tmp/atvb_diag:"$atvb_initdir" "$atvb_initdir"; then
