@@ -33,6 +33,8 @@ public class ProjectValidator
         if (!IsValidResolution(project.Resolution))
             errors.Add($"La résolution '{project.Resolution}' est invalide. Format attendu : LARGEURxHAUTEUR (ex: 1920x1080).");
 
+        errors.AddRange(ValidateGoogleServices(project.GoogleServices));
+
         foreach (var app in project.Apps)
         {
             var appErrors = ValidateApp(app);
@@ -55,6 +57,22 @@ public class ProjectValidator
             errors.Add($"Le fichier '{app.SourceApkPath}' n'est pas un APK valide.");
         else if (!_fileSystem.FileExists(app.SourceApkPath))
             errors.Add($"L'APK '{app.SourceApkPath}' est introuvable pour l'application '{app.Name}'.");
+
+        return errors;
+    }
+
+    private List<string> ValidateGoogleServices(GoogleServicesConfig config)
+    {
+        var errors = new List<string>();
+        if (!config.Enabled)
+            return errors;
+
+        if (string.IsNullOrWhiteSpace(config.DonorIsoPath) && string.IsNullOrWhiteSpace(config.PlayStoreApkPath))
+            errors.Add("Services Google TV : choisissez l'ISO donneuse qui les contient.");
+        if (!string.IsNullOrWhiteSpace(config.DonorIsoPath) && !_fileSystem.FileExists(config.DonorIsoPath))
+            errors.Add($"Services Google TV : l'ISO donneuse '{config.DonorIsoPath}' est introuvable.");
+        if (!string.IsNullOrWhiteSpace(config.PlayStoreApkPath) && !_fileSystem.FileExists(config.PlayStoreApkPath))
+            errors.Add($"Services Google TV : l'APK Play Store '{config.PlayStoreApkPath}' est introuvable.");
 
         return errors;
     }

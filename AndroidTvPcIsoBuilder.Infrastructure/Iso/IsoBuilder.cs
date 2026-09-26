@@ -4,7 +4,9 @@ using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Application.Services;
 using AndroidTvPcIsoBuilder.Domain.Entities;
 using AndroidTvPcIsoBuilder.Domain.Enums;
+using DiscUtils;
 using DiscUtils.Iso9660;
+using DiscUtils.SquashFs;
 
 namespace AndroidTvPcIsoBuilder.Infrastructure.Iso;
 
@@ -36,11 +38,36 @@ public class IsoBuilder : IIsoBuilder
     private const string SplashImageFileName = "splash.atvs";
     private const string SplashProgramResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.Splash.atvsplash";
 
+    /// <summary>Langue, fuseau et clavier, appliqués par le script de démarrage depuis "locale/".</summary>
+    private const string LocaleDirectory = "locale";
+    private const string LocalePropertiesFileName = "locale.prop";
+    private const string KeyboardFileName = "generic.kcm";
+
+    private const string SystemGraftImageFileName = "gapps.sfs";
+
+    private static readonly Dictionary<string, string> TimeZonesByLocale = new()
+    {
+        ["fr-FR"] = "Europe/Paris",
+        ["fr-BE"] = "Europe/Brussels",
+        ["fr-CH"] = "Europe/Zurich",
+        ["en-GB"] = "Europe/London",
+        ["de-DE"] = "Europe/Berlin",
+        ["es-ES"] = "Europe/Madrid",
+        ["it-IT"] = "Europe/Rome",
+    };
+
     private readonly IBootAnimationGenerator _bootAnimationGenerator;
+    private readonly IGoogleServicesExtractor _googleServicesExtractor;
 
     public IsoBuilder(IBootAnimationGenerator bootAnimationGenerator)
+        : this(bootAnimationGenerator, new GoogleServicesExtractor())
+    {
+    }
+
+    public IsoBuilder(IBootAnimationGenerator bootAnimationGenerator, IGoogleServicesExtractor googleServicesExtractor)
     {
         _bootAnimationGenerator = bootAnimationGenerator;
+        _googleServicesExtractor = googleServicesExtractor;
     }
 
     public async Task BuildAsync(
@@ -83,6 +110,7 @@ public class IsoBuilder : IIsoBuilder
             : new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
         var openStreams = new List<Stream>();
+        var googleServicesDirectory = Path.Combine(Path.GetTempPath(), "AndroidTvPcIsoBuilder", "GoogleServices");
         try
         {
             CopyDirectoryRecursive(reader.Root, builder, openStreams, replacedFiles, cancellationToken);
@@ -95,7 +123,18 @@ public class IsoBuilder : IIsoBuilder
 
             var bootAnimationAdded = await AddBootAnimationToImageAsync(builder, project, openStreams, _bootAnimationGenerator, cancellationToken);
 
-            if (project.Apps.Count > 0 || bootAnimationAdded)
+            var localeAdded = AddLocaleToImage(builder, project.Language);
+            var graftAdded = false;
+            if (project.GoogleServices.Enabled)
+            {
+                progress?.Report(new BuildProgress("Extraction des services Google TV", 72));
+                var extractResult = await _googleServicesExtractor.ExtractAsync(project.GoogleServices, googleServicesDirectory, cancellationToken);
+                if (!extractResult.IsSuccess)
+                    throw new InvalidOperationException(string.Join(Environment.NewLine, extractResult.Errors));
+                graftAdded = AddSystemGraftToImage(builder, extractResult.Value, openStreams);
+            }
+
+            if (project.Apps.Count > 0 || bootAnimationAdded || localeAdded || graftAdded)
             {
                 progress?.Report(new BuildProgress("Ajout du script de démarrage", 76));
                 AddBootScriptToImage(builder);
@@ -116,6 +155,8 @@ public class IsoBuilder : IIsoBuilder
         {
             foreach (var stream in openStreams)
                 stream.Dispose();
+            if (Directory.Exists(googleServicesDirectory))
+                Directory.Delete(googleServicesDirectory, recursive: true);
         }
 
         if (bootCatalog is not null)
@@ -412,6 +453,91 @@ public class IsoBuilder : IIsoBuilder
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Ajoute /locale : "locale.prop" (lignes ajoutées à system/build.prop par le script de
+    /// démarrage : langue, et fuseau horaire quand il est connu) et, si une disposition existe
+    /// pour cette langue, "generic.kcm" monté à la place du clavier physique générique (QWERTY US).
+    /// Rien n'est ajouté si la langue est vide ou n'a pas la forme "ll-RR".
+    /// </summary>
+    private static bool AddLocaleToImage(CDBuilder builder, string? language)
+    {
+        var locale = NormalizeLocale(language);
+        if (locale is null)
+            return false;
+
+        var properties = new StringBuilder();
+        properties.Append("persist.sys.locale=").Append(locale).Append('\n');
+        if (TimeZonesByLocale.TryGetValue(locale, out var timeZone))
+            properties.Append("persist.sys.timezone=").Append(timeZone).Append('\n');
+
+        builder.AddDirectory(LocaleDirectory);
+        builder.AddFile($"{LocaleDirectory}\\{LocalePropertiesFileName}", new UTF8Encoding(false).GetBytes(properties.ToString()));
+
+        var keyboardResource = $"AndroidTvPcIsoBuilder.Infrastructure.Assets.Keyboards.Generic-{locale}.kcm";
+        if (typeof(IsoBuilder).Assembly.GetManifestResourceInfo(keyboardResource) is not null)
+            builder.AddFile($"{LocaleDirectory}\\{KeyboardFileName}", ReadEmbeddedResource(keyboardResource));
+
+        return true;
+    }
+
+    /// <summary>
+    /// Emballe les services Google extraits dans /gapps.sfs (squashfs, droits Unix root 0644/0755) : le
+    /// script de démarrage le monte puis superpose (overlayfs) chacun de ses dossiers de 2e niveau
+    /// (ex. product/priv-app) au dossier système correspondant. Les fichiers ne peuvent pas rester
+    /// directement sur l'ISO : overlayfs refuse iso9660 comme couche ("filesystem not supported").
+    /// </summary>
+    private static bool AddSystemGraftToImage(CDBuilder builder, string? graftDirectory, List<Stream> openStreams)
+    {
+        if (string.IsNullOrWhiteSpace(graftDirectory) || !Directory.Exists(graftDirectory))
+            return false;
+
+        var files = Directory.GetFiles(graftDirectory, "*", SearchOption.AllDirectories);
+        if (files.Length == 0)
+            return false;
+
+        const UnixFilePermissions directoryPermissions = UnixFilePermissions.OwnerAll
+            | UnixFilePermissions.GroupRead | UnixFilePermissions.GroupExecute
+            | UnixFilePermissions.OthersRead | UnixFilePermissions.OthersExecute;
+        const UnixFilePermissions filePermissions = UnixFilePermissions.OwnerRead | UnixFilePermissions.OwnerWrite
+            | UnixFilePermissions.GroupRead | UnixFilePermissions.OthersRead;
+        var timestamp = new DateTime(2009, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var squashBuilder = new SquashFileSystemBuilder();
+        var sourceStreams = new List<Stream>();
+        try
+        {
+            foreach (var directory in Directory.GetDirectories(graftDirectory, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+                squashBuilder.AddDirectory(Path.GetRelativePath(graftDirectory, directory), 0, 0, directoryPermissions, timestamp);
+
+            foreach (var file in files)
+            {
+                var stream = File.OpenRead(file);
+                sourceStreams.Add(stream);
+                squashBuilder.AddFile(Path.GetRelativePath(graftDirectory, file), stream, 0, 0, filePermissions, timestamp);
+            }
+
+            var imageStream = new FileStream(Path.GetTempFileName(), FileMode.Create, FileAccess.ReadWrite, FileShare.None, 81920, FileOptions.DeleteOnClose);
+            openStreams.Add(imageStream);
+            squashBuilder.Build(imageStream);
+            imageStream.Seek(0, SeekOrigin.Begin);
+            builder.AddFile(SystemGraftImageFileName, imageStream);
+        }
+        finally
+        {
+            foreach (var stream in sourceStreams)
+                stream.Dispose();
+        }
+
+        return true;
+    }
+
+    /// <summary>"fr-fr", "fr_FR" → "fr-FR" ; null si la valeur n'est pas une locale "ll-RR" (elle finit dans build.prop).</summary>
+    public static string? NormalizeLocale(string? language)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(language?.Trim() ?? "", @"^([A-Za-z]{2,3})[-_]([A-Za-z]{2})\z");
+        return match.Success ? $"{match.Groups[1].Value.ToLowerInvariant()}-{match.Groups[2].Value.ToUpperInvariant()}" : null;
     }
 
     private static byte[] ReadEmbeddedResource(string resourceName)

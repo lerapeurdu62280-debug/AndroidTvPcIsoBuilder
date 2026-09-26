@@ -13,6 +13,8 @@ public class AndroidTvProject
     public string Resolution { get; set; } = "1920x1080";
     public string Language { get; set; } = "fr-FR";
     public List<AppPackage> Apps { get; set; } = new();
+
+    public GoogleServicesConfig GoogleServices { get; set; } = new();
     public List<BuildHistoryEntry> BuildHistory { get; set; } = new();
 }
 

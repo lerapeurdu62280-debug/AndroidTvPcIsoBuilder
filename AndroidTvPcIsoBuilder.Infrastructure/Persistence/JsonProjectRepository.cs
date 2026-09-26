@@ -16,12 +16,22 @@ public class JsonProjectRepository : IProjectRepository
 
     public JsonProjectRepository(string? storageDirectory = null)
     {
-        _storageDirectory = storageDirectory ?? Path.Combine(
+        _storageDirectory = storageDirectory ?? GetPortableDirectory() ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "AndroidTvPcIsoBuilder",
             "Projects");
 
         Directory.CreateDirectory(_storageDirectory);
+    }
+
+    /// <summary>
+    /// Version portable : si un dossier "Donnees" est posé à côté de l'exécutable, les projets
+    /// y sont enregistrés (clé USB, dossier copié d'un PC à l'autre) au lieu du profil Windows.
+    /// </summary>
+    private static string? GetPortableDirectory()
+    {
+        var portableRoot = Path.Combine(AppContext.BaseDirectory, "Donnees");
+        return Directory.Exists(portableRoot) ? Path.Combine(portableRoot, "Projects") : null;
     }
 
     public async Task<AndroidTvProject?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

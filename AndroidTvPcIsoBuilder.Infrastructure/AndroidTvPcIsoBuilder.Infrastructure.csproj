@@ -25,6 +25,7 @@
   <ItemGroup>
     <PackageReference Include="LTRData.DiscUtils.Core" Version="1.0.87" />
     <PackageReference Include="LTRData.DiscUtils.Iso9660" Version="1.0.87" />
+    <PackageReference Include="LTRData.DiscUtils.SquashFs" Version="1.0.87" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,15 +39,15 @@
          WithCulture="false" et LogicalName explicite sont nécessaires car MSBuild interprète sinon
          l'extension ".sh" du nom de fichier comme un code de culture (le Sindhi, "sh") et embarque
          le fichier dans un assembly satellite au lieu de l'assembly principal. -->
-    <EmbeddedResource Include="Assets\Scripts\atvbuilder-boot.sh" WithCulture="false"
-                       LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh" />
+    <EmbeddedResource Include="Assets\Scripts\atvbuilder-boot.sh" WithCulture="false" LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh" />
     <!-- Logo par défaut de l'animation de démarrage (voir BootAnimationGenerator). -->
-    <EmbeddedResource Include="Assets\BootAnimation\androidtv-logo.png"
-                       LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.BootAnimation.androidtv-logo.png" />
+    <EmbeddedResource Include="Assets\BootAnimation\androidtv-logo.png" LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.BootAnimation.androidtv-logo.png" />
     <!-- Programme Linux (x86_64, statique) qui anime le logo avant Android. Compilé depuis
          Assets\Splash\atvsplash.c avec Assets\Splash\build-atvsplash.sh (WSL). -->
-    <EmbeddedResource Include="Assets\Splash\atvsplash"
-                       LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Splash.atvsplash" />
+    <EmbeddedResource Include="Assets\Splash\atvsplash" LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Splash.atvsplash" />
+    <!-- Dispositions de clavier physique par langue : Generic.kcm d'AOSP (android14-release) fusionné
+         avec la disposition de InputDevices (ex. keyboard_layout_french.kcm) → type FULL. -->
+    <EmbeddedResource Include="Assets\Keyboards\Generic-fr-FR.kcm" WithCulture="false" LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Keyboards.Generic-fr-FR.kcm" />
   </ItemGroup>
 
 </Project>

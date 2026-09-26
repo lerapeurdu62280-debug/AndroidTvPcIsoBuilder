@@ -61,6 +61,21 @@ public class ProjectService
         return Result<AndroidTvProject>.Success(project);
     }
 
+    /// <summary>Enregistre le choix d'ajout des services Google TV (voir <see cref="GoogleServicesConfig"/>).</summary>
+    public async Task<Result<AndroidTvProject>> UpdateGoogleServicesAsync(
+        Guid projectId,
+        GoogleServicesConfig googleServices,
+        CancellationToken cancellationToken = default)
+    {
+        var project = await _repository.GetByIdAsync(projectId, cancellationToken);
+        if (project is null)
+            return Result<AndroidTvProject>.Failure($"Aucun projet trouvé avec l'identifiant '{projectId}'.");
+
+        project.GoogleServices = googleServices;
+        await _repository.SaveAsync(project, cancellationToken);
+        return Result<AndroidTvProject>.Success(project);
+    }
+
     public async Task<Result<AndroidTvProject>> GetProjectAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
         var project = await _repository.GetByIdAsync(projectId, cancellationToken);

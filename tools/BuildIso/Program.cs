@@ -3,6 +3,7 @@ using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Infrastructure.BootAnimation;
 using AndroidTvPcIsoBuilder.Infrastructure.Iso;
 var project = new AndroidTvProject { Name = "Test LineageOS", OutputIsoPath = args[1] };
+if (args.Length > 2) project.GoogleServices = new GoogleServicesConfig { Enabled = true, DonorIsoPath = args[2], PlayStoreApkPath = args.Length > 3 ? args[3] : null };
 var builder = new IsoBuilder(new BootAnimationGenerator());
 await builder.BuildAsync(project, args[0], new Progress<BuildProgress>(p => Console.WriteLine($"{p.PercentComplete}% {p.Step}")));
 var v = builder.Verify(project);

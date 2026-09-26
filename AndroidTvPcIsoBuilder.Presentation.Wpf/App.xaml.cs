@@ -39,6 +39,7 @@ namespace AndroidTvPcIsoBuilder.Presentation.Wpf
         {
             services.AddSingleton<IFileSystem, LocalFileSystem>();
             services.AddSingleton<IProjectRepository, JsonProjectRepository>();
+            services.AddSingleton<IGoogleServicesExtractor, GoogleServicesExtractor>();
             services.AddSingleton<IIsoBuilder, IsoBuilder>();
             services.AddSingleton<IDialogService, DialogService>();
             services.AddSingleton<INotificationService, NotificationService>();

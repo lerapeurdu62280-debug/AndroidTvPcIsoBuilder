@@ -108,6 +108,65 @@ atvb_apply_system()
 		fi
 	fi
 
+	# --- Applications système greffées (ex. services Google TV) ---------------
+	# gapps.sfs (squashfs) reprend l'arborescence du système (product/priv-app,
+	# product/etc, system_ext/priv-app, etc/permissions...). Chaque dossier de 2e
+	# niveau est superposé (overlayfs, deux couches en lecture seule) au dossier du
+	# système : Android voit ses fichiers d'origine plus ceux de l'image, sans rien
+	# copier en mémoire. (overlayfs refuse les fichiers de l'ISO elle-même comme couche.)
+	#
+	# Tout ou rien : si le système a déjà ses services Google (GmsCore), on n'ajoute
+	# rien du tout. Deux jeux de services Google (ou un mélange des deux) se
+	# gêneraient : mêmes paquets en double, permissions contradictoires.
+	atvb_gapps=/tmp/atvb_gapps
+	atvb_has_gms=
+	for atvb_dir in "$atvb_root"/system/priv-app "$atvb_root"/system/product/priv-app \
+		"$atvb_root"/system/system_ext/priv-app "$atvb_root"/system/app "$atvb_root"/system/product/app; do
+		ls -d "$atvb_dir"/*GmsCore* > /dev/null 2>&1 && atvb_has_gms=$atvb_dir
+	done
+	if [ -f "$atvb_src/gapps.sfs" ] && [ -n "$atvb_has_gms" ]; then
+		atvb_log "services Google deja presents ($atvb_has_gms), services Google TV de l'ISO non ajoutes"
+	elif [ -f "$atvb_src/gapps.sfs" ] && mkdir -p $atvb_gapps &&
+		mount -t squashfs -o loop,ro "$atvb_src/gapps.sfs" $atvb_gapps; then
+		for atvb_layer in $atvb_gapps/*/*; do
+			[ -d "$atvb_layer" ] || continue
+			atvb_rel=${atvb_layer#$atvb_gapps/}
+			atvb_target="$atvb_root"/system/$atvb_rel
+			if [ ! -d "$atvb_target" ]; then
+				atvb_log "greffe ignoree, dossier absent du systeme : $atvb_rel"
+			elif mount -t overlay overlay -o ro,lowerdir="$atvb_layer":"$atvb_target" "$atvb_target"; then
+				atvb_log "greffe appliquee : $atvb_rel ($(ls "$atvb_layer" | tr '\n' ' '))"
+			else
+				atvb_log "echec de la greffe : $atvb_rel"
+			fi
+		done
+	elif [ -f "$atvb_src/gapps.sfs" ]; then
+		atvb_log "impossible de monter gapps.sfs, applications systeme non greffees"
+	fi
+
+	# --- Langue, fuseau horaire et clavier --------------------------------------
+	# persist.sys.locale / persist.sys.timezone lus dans build.prop servent de valeurs
+	# par défaut tant que l'utilisateur n'a rien choisi (et sont prioritaires sur
+	# ro.product.locale, que product/etc/build.prop fixe souvent à en-US). On ajoute
+	# ces lignes à une copie de system/build.prop présentée à la place de l'original.
+	atvb_prop="$atvb_root"/system/build.prop
+	if [ -f "$atvb_src/locale/locale.prop" ] && [ -f "$atvb_prop" ]; then
+		cat "$atvb_prop" > /tmp/atvb_build.prop
+		echo >> /tmp/atvb_build.prop
+		cat "$atvb_src/locale/locale.prop" >> /tmp/atvb_build.prop
+		chmod 644 /tmp/atvb_build.prop
+		mount --bind /tmp/atvb_build.prop "$atvb_prop" &&
+			atvb_log "langue appliquee : $(tr '\n' ' ' < "$atvb_src/locale/locale.prop")"
+	fi
+
+	# Generic.kcm = disposition de tout clavier physique sans fichier dédié (QWERTY US
+	# d'origine). On le remplace par la disposition de la langue (ex. AZERTY).
+	atvb_kcm="$atvb_root"/system/usr/keychars/Generic.kcm
+	if [ -f "$atvb_src/locale/generic.kcm" ] && [ -f "$atvb_kcm" ] &&
+		mount --bind "$atvb_src/locale/generic.kcm" "$atvb_kcm"; then
+		atvb_log "disposition du clavier remplacee ($atvb_kcm)"
+	fi
+
 	# --- Applications à installer ---------------------------------------------
 	# init.sh (do_bootcomplete) installe avec "pm install" chaque fichier de
 	# /system/etc/user_app/ une fois par build. On présente à la place un dossier

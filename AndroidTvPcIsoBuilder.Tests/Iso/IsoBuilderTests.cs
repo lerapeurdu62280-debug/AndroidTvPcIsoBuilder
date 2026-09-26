@@ -186,11 +186,12 @@ public class IsoBuilderTests
     }
 
     [TestMethod]
-    public async Task BuildAsync_SansAppsNiAnimation_NAjoutePasDeScriptDeDemarrage()
+    public async Task BuildAsync_SansAppsNiAnimationNiLangue_NAjoutePasDeScriptDeDemarrage()
     {
         CreateSourceIsoWithBoot();
         var project = CreateProject(_outputIsoPath);
         project.BootAnimation.Enabled = false;
+        project.Language = "";
         var builder = new IsoBuilder(new FakeBootAnimationGenerator());
 
         await builder.BuildAsync(project, _sourceIsoPath);
@@ -198,6 +199,98 @@ public class IsoBuilderTests
         await using var outputStream = File.OpenRead(_outputIsoPath);
         var reader = new CDReader(outputStream, joliet: true);
         Assert.IsFalse(reader.DirectoryExists("SCRIPTS"));
+        Assert.IsFalse(reader.DirectoryExists("LOCALE"));
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_EnFrancais_AjouteLangueFuseauClavierAzertyEtScript()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        project.Language = "fr_fr";
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        Assert.IsTrue(reader.FileExists("SCRIPTS\\ATVBUILDER"));
+
+        using (var propStream = reader.OpenFile("LOCALE\\LOCALE.PROP", FileMode.Open))
+        using (var propReader = new StreamReader(propStream))
+            Assert.AreEqual("persist.sys.locale=fr-FR\npersist.sys.timezone=Europe/Paris\n", propReader.ReadToEnd());
+
+        using var kcmStream = reader.OpenFile("LOCALE\\GENERIC.KCM", FileMode.Open);
+        using var kcmReader = new StreamReader(kcmStream);
+        var kcm = kcmReader.ReadToEnd();
+        StringAssert.Contains(kcm, "type FULL");
+        StringAssert.Contains(kcm, "map key 16 A");
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_LangueSansDisposition_AjouteLaLangueSansClavier()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        project.Language = "en-US";
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        Assert.IsTrue(reader.FileExists("LOCALE\\LOCALE.PROP"));
+        Assert.IsFalse(reader.FileExists("LOCALE\\GENERIC.KCM"));
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_AvecServicesGoogle_AjouteUneImageSquashfsLisibleEtLeScript()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        project.Language = "";
+        project.GoogleServices = new GoogleServicesConfig { Enabled = true, DonorIsoPath = "donneuse.iso" };
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator(), new FakeGoogleServicesExtractor());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        Assert.IsTrue(reader.FileExists("SCRIPTS\\ATVBUILDER"));
+        using var sfsStream = reader.OpenFile("GAPPS.SFS", FileMode.Open);
+        var squash = new DiscUtils.SquashFs.SquashFileSystemReader(sfsStream);
+        using var apk = squash.OpenFile("product\\priv-app\\PrebuiltGmsCorePano\\PrebuiltGmsCorePano.apk", FileMode.Open);
+        Assert.AreEqual(3, apk.Length);
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_ServicesGoogleDesactives_NAppellePasLExtracteur()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        project.GoogleServices = new GoogleServicesConfig { Enabled = false, DonorIsoPath = "donneuse.iso" };
+        var extractor = new FakeGoogleServicesExtractor();
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator(), extractor);
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        Assert.AreEqual(0, extractor.CallCount);
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        Assert.IsFalse(new CDReader(outputStream, joliet: true).FileExists("GAPPS.SFS"));
+    }
+
+    [TestMethod]
+    [DataRow("fr-FR", "fr-FR")]
+    [DataRow(" FR_be ", "fr-BE")]
+    [DataRow("fr", null)]
+    [DataRow("fr-FR\npersist.x=1", null)]
+    [DataRow(null, null)]
+    public void NormalizeLocale_NAccepteQueLaFormeLangueRegion(string? input, string? expected)
+    {
+        Assert.AreEqual(expected, IsoBuilder.NormalizeLocale(input));
     }
 
     [TestMethod]

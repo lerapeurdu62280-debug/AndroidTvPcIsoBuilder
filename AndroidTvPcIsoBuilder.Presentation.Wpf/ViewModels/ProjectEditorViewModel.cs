@@ -46,6 +46,15 @@ public partial class ProjectEditorViewModel : ObservableObject
     private BootMode _bootMode;
 
     [ObservableProperty]
+    private bool _googleServicesEnabled;
+
+    [ObservableProperty]
+    private string _googleDonorIsoPath = string.Empty;
+
+    [ObservableProperty]
+    private string _playStoreApkPath = string.Empty;
+
+    [ObservableProperty]
     private bool _isLoaded;
 
     [ObservableProperty]
@@ -98,6 +107,9 @@ public partial class ProjectEditorViewModel : ObservableObject
         Language = project.Language;
         BootMode = project.BootMode;
         SourceIsoPath = project.SourceIso.LocalPath ?? string.Empty;
+        GoogleServicesEnabled = project.GoogleServices.Enabled;
+        GoogleDonorIsoPath = project.GoogleServices.DonorIsoPath ?? string.Empty;
+        PlayStoreApkPath = project.GoogleServices.PlayStoreApkPath ?? string.Empty;
 
         Apps.Clear();
         foreach (var app in project.Apps)
@@ -149,6 +161,16 @@ public partial class ProjectEditorViewModel : ObservableObject
             bootMode: BootMode,
             sourceIsoLocalPath: string.IsNullOrWhiteSpace(SourceIsoPath) ? null : SourceIsoPath);
 
+        if (result.IsSuccess)
+        {
+            result = await _projectService.UpdateGoogleServicesAsync(_projectId, new GoogleServicesConfig
+            {
+                Enabled = GoogleServicesEnabled,
+                DonorIsoPath = string.IsNullOrWhiteSpace(GoogleDonorIsoPath) ? null : GoogleDonorIsoPath,
+                PlayStoreApkPath = string.IsNullOrWhiteSpace(PlayStoreApkPath) ? null : PlayStoreApkPath
+            });
+        }
+
         if (!result.IsSuccess)
         {
             _dialogService.ShowError("Enregistrement impossible", string.Join(Environment.NewLine, result.Errors));
@@ -165,6 +187,22 @@ public partial class ProjectEditorViewModel : ObservableObject
         var path = _dialogService.PickFile("Sélectionnez l'image ISO source Android TV", "Image ISO (*.iso)|*.iso");
         if (path is not null)
             SourceIsoPath = path;
+    }
+
+    [RelayCommand]
+    private void BrowseGoogleDonorIsoPath()
+    {
+        var path = _dialogService.PickFile("Sélectionnez l'ISO Android TV qui contient les services Google (ex. Google TV x86)", "Image ISO (*.iso)|*.iso");
+        if (path is not null)
+            GoogleDonorIsoPath = path;
+    }
+
+    [RelayCommand]
+    private void BrowsePlayStoreApkPath()
+    {
+        var path = _dialogService.PickFile("Sélectionnez l'APK « Google Play Store (Android TV) »", "Application Android (*.apk)|*.apk");
+        if (path is not null)
+            PlayStoreApkPath = path;
     }
 
     [RelayCommand]
