@@ -16,17 +16,25 @@ namespace AndroidTvPcIsoBuilder.Infrastructure.Iso;
 /// </summary>
 public class IsoBuilder : IIsoBuilder
 {
-    private const string AppsDirectory = "APPS";
-    private const string ManifestFileName = "MANIFEST.JSON";
+    private const string AppsDirectory = "apps";
+    private const string ManifestFileName = "manifest.json";
 
     /// <summary>
     /// L'init de l'initrd Android-x86/BlissOS source chaque fichier de /src/scripts/* (racine
     /// de l'ISO) après le montage du système et avant switch_root. DiscUtils écrit les noms en
     /// majuscules, que le pilote iso9660 de Linux présente en minuscules : "scripts/atvbuilder" côté Android.
     /// </summary>
-    private const string BootScriptDirectory = "SCRIPTS";
-    private const string BootScriptFileName = "ATVBUILDER";
+    private const string BootScriptDirectory = "scripts";
+    private const string BootScriptFileName = "atvbuilder";
     private const string BootScriptResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh";
+
+    /// <summary>
+    /// Programme qui anime le logo sur le framebuffer avant Android (Assets/Splash/atvsplash.c),
+    /// lancé par le script de démarrage depuis "bootanim/atvsplash" avec "bootanim/splash.atvs".
+    /// </summary>
+    private const string SplashProgramFileName = "atvsplash";
+    private const string SplashImageFileName = "splash.atvs";
+    private const string SplashProgramResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.Splash.atvsplash";
 
     private readonly IBootAnimationGenerator _bootAnimationGenerator;
 
@@ -49,6 +57,11 @@ public class IsoBuilder : IIsoBuilder
         var preserver = new BootCatalogPreserver();
         var bootCatalog = preserver.ReadBootCatalog(sourceStream, reader);
 
+        // Le nom de volume d'origine est conservé (voir VolumeIdentityPreserver) : le système
+        // Android peut s'en servir pour retrouver son support. Le nom du projet ne sert que si
+        // la source n'en a pas.
+        var sourceIdentity = VolumeIdentityPreserver.Read(sourceStream);
+
         progress?.Report(new BuildProgress("Copie du contenu de l'image", 20));
 
         var builder = new CDBuilder
@@ -57,10 +70,22 @@ public class IsoBuilder : IIsoBuilder
             VolumeIdentifier = SanitizeVolumeIdentifier(project.Name)
         };
 
+        // Image de boot provisoire : elle fait réserver par CDBuilder le descripteur "Boot Record"
+        // que BootCatalogPreserver remplace ensuite par celui de la source. Sans elle, il n'y a
+        // aucun emplacement libre parmi les descripteurs de volume.
+        if (bootCatalog is not null)
+            builder.SetBootImage(new MemoryStream(new byte[BootCatalogPreserver.SectorSize]), BootDeviceEmulation.NoEmulation, 0);
+
+        // Avec le logo animé, le menu de démarrage d'origine disparaît : l'ISO démarre
+        // directement, sans texte, sur la première entrée du menu.
+        var replacedFiles = project.BootAnimation.Enabled
+            ? BuildSilentBootReplacements(reader)
+            : new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+
         var openStreams = new List<Stream>();
         try
         {
-            CopyDirectoryRecursive(reader.Root, builder, openStreams, cancellationToken);
+            CopyDirectoryRecursive(reader.Root, builder, openStreams, replacedFiles, cancellationToken);
 
             progress?.Report(new BuildProgress("Injection des applications", 60));
 
@@ -101,6 +126,13 @@ public class IsoBuilder : IIsoBuilder
 
             await using var outputStream = File.Open(project.OutputIsoPath, FileMode.Open, FileAccess.ReadWrite);
             preserver.ApplyBootCatalog(outputStream, bootCatalog, platformsToKeep);
+        }
+
+        await using (var outputStream = File.Open(project.OutputIsoPath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            JolietFileNameFixer.Fix(outputStream);
+            if (sourceIdentity is { Label.Length: > 0 })
+                VolumeIdentityPreserver.Apply(outputStream, sourceIdentity);
         }
     }
 
@@ -172,15 +204,28 @@ public class IsoBuilder : IIsoBuilder
         return intersection.Count > 0 ? intersection : null;
     }
 
-    private static void CopyDirectoryRecursive(DiscUtils.DiscDirectoryInfo sourceDir, CDBuilder builder, List<Stream> openStreams, CancellationToken cancellationToken)
+    /// <param name="replacedFiles">Fichiers dont le contenu est remplacé, par chemin dans l'image.</param>
+    private static void CopyDirectoryRecursive(
+        DiscUtils.DiscDirectoryInfo sourceDir,
+        CDBuilder builder,
+        List<Stream> openStreams,
+        IReadOnlyDictionary<string, byte[]> replacedFiles,
+        CancellationToken cancellationToken)
     {
         foreach (var file in sourceDir.GetFiles())
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var imagePath = NormalizeIso9660Name(file.FullName.TrimStart('\\'));
+            if (replacedFiles.TryGetValue(imagePath, out var replacement))
+            {
+                builder.AddFile(imagePath, replacement);
+                continue;
+            }
+
             var fileStream = file.OpenRead();
             openStreams.Add(fileStream);
-            builder.AddFile(NormalizeIso9660Name(file.FullName.TrimStart('\\')), fileStream);
+            builder.AddFile(imagePath, fileStream);
         }
 
         foreach (var subDir in sourceDir.GetDirectories())
@@ -188,8 +233,69 @@ public class IsoBuilder : IIsoBuilder
             cancellationToken.ThrowIfCancellationRequested();
 
             builder.AddDirectory(subDir.FullName.TrimStart('\\'));
-            CopyDirectoryRecursive(subDir, builder, openStreams, cancellationToken);
+            CopyDirectoryRecursive(subDir, builder, openStreams, replacedFiles, cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Nouvelles configurations de démarrage (voir <see cref="SilentBootConfig"/>) : chaque
+    /// isolinux.cfg / syslinux.cfg qui démarre un noyau (BIOS) et /boot/grub/grub.cfg (UEFI).
+    /// L'entrée retenue est celle du menu ISOLINUX d'origine, sinon celle de grub.cfg quand
+    /// l'ISO n'a pas d'ISOLINUX. Sans entrée reconnue, rien n'est modifié : mieux vaut garder
+    /// le menu d'origine qu'une ISO qui ne démarre plus.
+    /// </summary>
+    private static Dictionary<string, byte[]> BuildSilentBootReplacements(CDReader reader)
+    {
+        var replacements = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        var utf8 = new UTF8Encoding(false);
+
+        BootEntry? entry = null;
+        foreach (var file in EnumerateFiles(reader.Root))
+        {
+            var fileName = Path.GetFileName(NormalizeIso9660Name(file.FullName));
+            if (!fileName.Equals("isolinux.cfg", StringComparison.OrdinalIgnoreCase)
+                && !fileName.Equals("syslinux.cfg", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string content;
+            using (var stream = file.OpenRead())
+            using (var streamReader = new StreamReader(stream, Encoding.UTF8))
+                content = streamReader.ReadToEnd();
+
+            var fileEntry = SilentBootConfig.FindDefaultIsolinuxEntry(content);
+            if (fileEntry is null)
+                continue; // Fichier qui ne fait que charger une autre configuration.
+
+            entry ??= fileEntry;
+            replacements[NormalizeIso9660Name(file.FullName.TrimStart('\\'))] =
+                utf8.GetBytes(SilentBootConfig.BuildIsolinuxConfig(fileEntry));
+        }
+
+        const string grubConfigPath = "boot\\grub\\grub.cfg";
+        if (!reader.FileExists(grubConfigPath))
+            return replacements;
+
+        // ISO démarrée par GRUB seul (LineageOS TV x86, BlissOS) : l'entrée vient de grub.cfg.
+        if (entry is null)
+        {
+            using var stream = reader.OpenFile(grubConfigPath, FileMode.Open, FileAccess.Read);
+            using var streamReader = new StreamReader(stream, Encoding.UTF8);
+            entry = SilentBootConfig.FindDefaultGrubEntry(streamReader.ReadToEnd());
+        }
+
+        if (entry is not null)
+            replacements[grubConfigPath] = utf8.GetBytes(SilentBootConfig.BuildGrubConfig(entry));
+
+        return replacements;
+    }
+
+    private static IEnumerable<DiscUtils.DiscFileInfo> EnumerateFiles(DiscUtils.DiscDirectoryInfo directory)
+    {
+        foreach (var file in directory.GetFiles())
+            yield return file;
+        foreach (var subDirectory in directory.GetDirectories())
+            foreach (var file in EnumerateFiles(subDirectory))
+                yield return file;
     }
 
     /// <summary>
@@ -282,7 +388,7 @@ public class IsoBuilder : IIsoBuilder
         if (!project.BootAnimation.Enabled)
             return false;
 
-        const string bootAnimationDirectory = "BOOTANIM";
+        const string bootAnimationDirectory = "bootanim";
         const string bootAnimationFileName = "bootanimation.zip";
 
         var stagingDirectory = Path.Combine(Path.GetTempPath(), "AndroidTvPcIsoBuilder", "BootAnimation");
@@ -294,7 +400,27 @@ public class IsoBuilder : IIsoBuilder
         var zipStream = File.OpenRead(generateResult.Value);
         openStreams.Add(zipStream);
         builder.AddFile($"{bootAnimationDirectory}\\{bootAnimationFileName}", zipStream);
+
+        // Logo animé dès le début du démarrage (avant Android) : programme atvsplash + son image.
+        var splashResult = await bootAnimationGenerator.GenerateSplashImageAsync(project.BootAnimation, stagingDirectory, cancellationToken);
+        if (splashResult.IsSuccess)
+        {
+            var splashStream = File.OpenRead(splashResult.Value);
+            openStreams.Add(splashStream);
+            builder.AddFile($"{bootAnimationDirectory}\\{SplashImageFileName}", splashStream);
+            builder.AddFile($"{bootAnimationDirectory}\\{SplashProgramFileName}", ReadEmbeddedResource(SplashProgramResourceName));
+        }
+
         return true;
+    }
+
+    private static byte[] ReadEmbeddedResource(string resourceName)
+    {
+        using var resourceStream = typeof(IsoBuilder).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Ressource embarquée introuvable : {resourceName}");
+        using var memory = new MemoryStream();
+        resourceStream.CopyTo(memory);
+        return memory.ToArray();
     }
 
     /// <summary>

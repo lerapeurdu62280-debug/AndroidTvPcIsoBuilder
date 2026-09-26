@@ -48,9 +48,7 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             Directory.CreateDirectory(introDirectory);
             Directory.CreateDirectory(loopDirectory);
 
-            var logo = !string.IsNullOrWhiteSpace(config.SourceImagePath) && File.Exists(config.SourceImagePath)
-                ? LoadSourceImage(config.SourceImagePath)
-                : LoadDefaultLogo();
+            var logo = LoadLogo(config);
 
             // Fondu d'entrée : opacité 0 -> 1 et échelle 0.95 -> 1.0 sur une seconde.
             var introFrameCount = Math.Max(1, config.FrameRate);
@@ -97,6 +95,82 @@ public class BootAnimationGenerator : IBootAnimationGenerator
         }
     }
 
+    /// <summary>
+    /// Produit le fichier "ATVS" lu par atvsplash (voir Assets/Splash/atvsplash.c) :
+    /// "ATVS" | u16 largeur | u16 hauteur | u16 cycle_ms | u16 fondu_ms | pixels RGB.
+    /// Le logo y est à la taille exacte où la bootanimation le dessine (le lecteur Android
+    /// affiche les frames à l'échelle 1, centrées), déjà composé sur fond noir : la transition
+    /// entre les deux animations se fait donc sans saut de taille ni de position.
+    /// </summary>
+    public async Task<Result<string>> GenerateSplashImageAsync(BootAnimationConfig config, string outputDirectory, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            Directory.CreateDirectory(outputDirectory);
+
+            var logo = LoadLogo(config);
+            var (logoWidth, logoHeight) = GetLogoSize(logo);
+            var width = Math.Max(1, (int)Math.Round(logoWidth));
+            var height = Math.Max(1, (int)Math.Round(logoHeight));
+
+            var visual = new DrawingVisual();
+            using (var context = visual.RenderOpen())
+            {
+                context.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
+                context.DrawImage(logo, new Rect(0, 0, width, height));
+            }
+
+            var renderTarget = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            renderTarget.Render(visual);
+
+            var bgra = new byte[width * height * 4];
+            renderTarget.CopyPixels(bgra, width * 4, 0);
+
+            var cycleMilliseconds = Math.Clamp(config.DurationSeconds * 1000, 1, ushort.MaxValue);
+            const int fadeMilliseconds = 1000; // = part0 de la bootanimation (FrameRate frames à FrameRate i/s)
+
+            var splashPath = Path.Combine(outputDirectory, "splash.atvs");
+            await using var output = new FileStream(splashPath, FileMode.Create, FileAccess.Write);
+            using var writer = new BinaryWriter(output);
+            writer.Write("ATVS"u8);
+            writer.Write((ushort)width);
+            writer.Write((ushort)height);
+            writer.Write((ushort)cycleMilliseconds);
+            writer.Write((ushort)fadeMilliseconds);
+
+            var rgb = new byte[width * height * 3];
+            for (int source = 0, target = 0; source < bgra.Length; source += 4, target += 3)
+            {
+                // Fond noir opaque dessiné en premier : les pixels sont déjà composés (alpha = 255).
+                rgb[target] = bgra[source + 2];
+                rgb[target + 1] = bgra[source + 1];
+                rgb[target + 2] = bgra[source];
+            }
+            writer.Write(rgb);
+
+            return Result<string>.Success(splashPath);
+        }
+        catch (Exception ex)
+        {
+            return Result<string>.Failure($"Échec de la génération du logo de démarrage : {ex.Message}");
+        }
+    }
+
+    private static BitmapSource LoadLogo(BootAnimationConfig config) =>
+        !string.IsNullOrWhiteSpace(config.SourceImagePath) && File.Exists(config.SourceImagePath)
+            ? LoadSourceImage(config.SourceImagePath)
+            : LoadDefaultLogo();
+
+    /// <summary>
+    /// Taille du logo dans une frame : réduit si besoin pour tenir dans
+    /// <see cref="MaxLogoWidth"/> x <see cref="MaxLogoHeight"/>, jamais agrandi.
+    /// </summary>
+    private static (double Width, double Height) GetLogoSize(BitmapSource logo)
+    {
+        var ratio = Math.Min(1.0, Math.Min(MaxLogoWidth / logo.PixelWidth, MaxLogoHeight / logo.PixelHeight));
+        return (logo.PixelWidth * ratio, logo.PixelHeight * ratio);
+    }
+
     private static BitmapSource LoadSourceImage(string path)
     {
         var bitmap = new BitmapImage();
@@ -140,9 +214,7 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             context.PushOpacity(opacity);
             context.PushTransform(new ScaleTransform(scale, scale, centerX, centerY));
 
-            var ratio = Math.Min(1.0, Math.Min(MaxLogoWidth / logo.PixelWidth, MaxLogoHeight / logo.PixelHeight));
-            var width = logo.PixelWidth * ratio;
-            var height = logo.PixelHeight * ratio;
+            var (width, height) = GetLogoSize(logo);
             context.DrawImage(logo, new Rect(centerX - width / 2, centerY - height / 2, width, height));
 
             context.Pop(); // ScaleTransform

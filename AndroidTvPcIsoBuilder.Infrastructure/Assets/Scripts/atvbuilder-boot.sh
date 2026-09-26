@@ -1,14 +1,13 @@
 # atvbuilder-boot.sh — ajouté par AndroidTvPcIsoBuilder dans /scripts de l'ISO.
 #
 # L'init de l'initrd des images Android-x86/BlissOS fait "source" de chaque fichier
-# de /src/scripts/* (= dossier "scripts" à la racine de l'ISO) après avoir monté le
-# système Android dans /android, et avant switch_root. À ce moment :
-#   - le répertoire courant est /android (system.img monté en lecture seule) ;
-#   - le contenu de l'ISO est accessible sous /mnt/$SRC.
+# de /src/scripts/* (= dossier "scripts" à la racine de l'ISO) avant switch_root ;
+# le contenu de l'ISO est alors accessible sous /mnt/$SRC. Selon la génération
+# d'init, le système Android est déjà monté ou pas encore (voir la fin du fichier).
 #
-# L'ISO produite par DiscUtils stocke ses noms en majuscules (APPS, BOOTANIM...) et
-# le pilote iso9660 de Linux les présente en minuscules : on utilise donc toujours
-# des chemins en minuscules ici (vérifié en montant une ISO générée sous Linux).
+# Les fichiers ajoutés portent des noms en minuscules en Joliet (vus tels quels par
+# un montage normal) et en majuscules en ISO9660 strict, que le pilote iso9660 de
+# Linux présente en minuscules (nojoliet) : les chemins sont donc en minuscules ici.
 #
 # Le système étant en lecture seule, on remplace des fichiers par "mount --bind",
 # exactement comme le fait déjà l'init d'origine (pc.xml, fakeboot.xml...).
@@ -24,38 +23,76 @@ atvb_log()
 
 atvb_src=/mnt/$SRC
 
-# --- Animation de démarrage personnalisée -------------------------------------
-# Emplacements possibles de l'animation d'origine selon la base système. Un bind
-# mount ne peut remplacer qu'un fichier existant : sans animation d'origine, on
-# ne peut rien faire (le système reste en lecture seule).
-if [ -f "$atvb_src/bootanim/bootanimation.zip" ]; then
-	atvb_done=
-	for atvb_target in system/product/media/bootanimation.zip system/media/bootanimation.zip; do
-		if [ -f "$atvb_target" ]; then
-			if mount --bind "$atvb_src/bootanim/bootanimation.zip" "$atvb_target"; then
+# --- Logo animé dès le début du démarrage --------------------------------------
+# atvsplash dessine le logo sur le framebuffer (dès qu'il existe) jusqu'au lancement
+# de la bootanimation d'Android, puis s'arrête tout seul. Lancé en premier pour que
+# le logo apparaisse le plus tôt possible. Il survit au switch_root de l'init.
+if [ -f "$atvb_src/bootanim/atvsplash" ] && [ -f "$atvb_src/bootanim/splash.atvs" ]; then
+	"$atvb_src/bootanim/atvsplash" "$atvb_src/bootanim/splash.atvs" < /dev/null > /dev/null 2>&1 &
+	atvb_log "logo de demarrage lance (pid $!)"
+fi
+
+# Tout ce qui suit modifie le système Android : il doit être monté. $1 = dossier
+# racine du système monté (celui qui contient "system/").
+atvb_apply_system()
+{
+	atvb_root=$1
+
+	# --- Animation de démarrage personnalisée ---------------------------------
+	# Un bind mount ne peut remplacer qu'un fichier existant : sans animation
+	# d'origine, on ne peut rien faire (le système reste en lecture seule). On
+	# remplace toutes les variantes présentes (clair/sombre, system/product).
+	if [ -f "$atvb_src/bootanim/bootanimation.zip" ]; then
+		atvb_done=
+		for atvb_target in \
+			"$atvb_root"/system/product/media/bootanimation.zip \
+			"$atvb_root"/system/product/media/bootanimation-dark.zip \
+			"$atvb_root"/product/media/bootanimation.zip \
+			"$atvb_root"/system/media/bootanimation.zip; do
+			if [ -f "$atvb_target" ] &&
+				mount --bind "$atvb_src/bootanim/bootanimation.zip" "$atvb_target"; then
 				atvb_done=1
 				atvb_log "animation de demarrage remplacee ($atvb_target)"
 			fi
-			break
-		fi
-	done
-	[ -z "$atvb_done" ] && atvb_log "aucune bootanimation.zip d'origine a remplacer, animation ignoree"
-fi
-
-# --- Applications à installer --------------------------------------------------
-# init.sh (do_bootcomplete) installe avec "pm install" chaque fichier de
-# /system/etc/user_app/ une fois par build. On présente à la place un dossier en
-# RAM contenant les APK d'origine + ceux de l'ISO.
-if [ -d "$atvb_src/apps" ]; then
-	if [ -d system/etc/user_app ]; then
-		mkdir -p /tmp/atvb_user_app
-		cp system/etc/user_app/* /tmp/atvb_user_app/ 2> /dev/null
-		cp "$atvb_src"/apps/*.apk /tmp/atvb_user_app/ 2> /dev/null
-		chmod 644 /tmp/atvb_user_app/*
-		if mount --bind /tmp/atvb_user_app system/etc/user_app; then
-			atvb_log "applications ajoutees a l'installation automatique : $(ls /tmp/atvb_user_app | tr '\n' ' ')"
-		fi
-	else
-		atvb_log "pas de /system/etc/user_app sur cette base, applications non installees automatiquement"
+		done
+		[ -z "$atvb_done" ] && atvb_log "aucune bootanimation.zip d'origine a remplacer, animation ignoree"
 	fi
+
+	# --- Applications à installer ---------------------------------------------
+	# init.sh (do_bootcomplete) installe avec "pm install" chaque fichier de
+	# /system/etc/user_app/ une fois par build. On présente à la place un dossier
+	# en RAM (/tmp est un tmpfs, il survit au switch_root) contenant les APK
+	# d'origine + ceux de l'ISO.
+	if [ -d "$atvb_src/apps" ]; then
+		if [ -d "$atvb_root"/system/etc/user_app ]; then
+			mkdir -p /tmp/atvb_user_app
+			cp "$atvb_root"/system/etc/user_app/* /tmp/atvb_user_app/ 2> /dev/null
+			cp "$atvb_src"/apps/*.apk /tmp/atvb_user_app/ 2> /dev/null
+			chmod 644 /tmp/atvb_user_app/*
+			if mount --bind /tmp/atvb_user_app "$atvb_root"/system/etc/user_app; then
+				atvb_log "applications ajoutees a l'installation automatique : $(ls /tmp/atvb_user_app | tr '\n' ' ')"
+			fi
+		else
+			atvb_log "pas de /system/etc/user_app sur cette base, applications non installees automatiquement"
+		fi
+	fi
+}
+
+# Deux générations d'init :
+#   - Android-x86 historique : le système est déjà monté dans /android et c'est le
+#     répertoire courant → on applique tout de suite ;
+#   - BlissOS 15+ / LineageOS x86 : les scripts sont sourcés AVANT le montage
+#     (process_fstab vient après). L'init appelle ensuite "post_detect", un
+#     crochet qu'elle ne définit pas elle-même, juste avant switch_root : on le
+#     définit pour appliquer les modifications une fois le système monté.
+if [ -d system/etc ]; then
+	atvb_apply_system .
+elif ! type post_detect 2> /dev/null | grep -q function; then
+	post_detect()
+	{
+		atvb_apply_system "${MODE_BASE:-/android}"
+	}
+	atvb_log "systeme pas encore monte, modifications differees (post_detect)"
+else
+	atvb_log "systeme pas encore monte et post_detect deja defini, animation et applications ignorees"
 fi

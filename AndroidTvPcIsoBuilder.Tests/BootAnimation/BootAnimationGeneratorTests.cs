@@ -24,6 +24,26 @@ public class BootAnimationGeneratorTests
     }
 
     [TestMethod]
+    public async Task GenerateSplashImageAsync_LogoParDefaut_ProduitUnFichierAtvsCoherent()
+    {
+        var generator = new BootAnimationGenerator();
+        var config = new BootAnimationConfig { DurationSeconds = 4 };
+
+        var result = await generator.GenerateSplashImageAsync(config, _outputDirectory);
+
+        Assert.IsTrue(result.IsSuccess, string.Join(" ", result.Errors));
+        var bytes = await File.ReadAllBytesAsync(result.Value);
+        CollectionAssert.AreEqual("ATVS"u8.ToArray(), bytes[..4]);
+
+        int width = BitConverter.ToUInt16(bytes, 4), height = BitConverter.ToUInt16(bytes, 6);
+        Assert.IsTrue(width is > 0 and <= 900 && height is > 0 and <= 420, $"Taille inattendue {width}x{height}.");
+        Assert.AreEqual(4000, BitConverter.ToUInt16(bytes, 8), "Le cycle de respiration doit suivre DurationSeconds.");
+        Assert.AreEqual(1000, BitConverter.ToUInt16(bytes, 10));
+        Assert.AreEqual(12 + width * height * 3, bytes.Length);
+        Assert.IsTrue(bytes.Skip(12).Any(b => b > 100), "Le logo ne doit pas être entièrement noir.");
+    }
+
+    [TestMethod]
     public async Task GenerateAsync_LogoParDefaut_ProduitUnZipAvecDescTxtEtFramesPng()
     {
         var generator = new BootAnimationGenerator();

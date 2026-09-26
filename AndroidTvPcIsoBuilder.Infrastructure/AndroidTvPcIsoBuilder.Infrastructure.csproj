@@ -43,6 +43,10 @@
     <!-- Logo par défaut de l'animation de démarrage (voir BootAnimationGenerator). -->
     <EmbeddedResource Include="Assets\BootAnimation\androidtv-logo.png"
                        LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.BootAnimation.androidtv-logo.png" />
+    <!-- Programme Linux (x86_64, statique) qui anime le logo avant Android. Compilé depuis
+         Assets\Splash\atvsplash.c avec Assets\Splash\build-atvsplash.sh (WSL). -->
+    <EmbeddedResource Include="Assets\Splash\atvsplash"
+                       LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Splash.atvsplash" />
   </ItemGroup>
 
 </Project>

@@ -143,7 +143,12 @@ public class BootCatalogPreserver
         var bootRecord = (byte[])bootCatalog.RawBootRecordSector.Clone();
         BitConverter.GetBytes(appendSector).CopyTo(bootRecord, 71);
 
-        WriteSector(targetIsoStream, bootCatalog.BootRecordSector, bootRecord);
+        // Le Boot Record est réécrit à l'emplacement réservé dans la NOUVELLE image, pas à celui
+        // qu'il occupait dans la source : dans une image CDBuilder sans image de boot, ce secteur
+        // (17) est le descripteur Joliet, et l'écraser privait l'ISO de ses noms longs (GRUB ne
+        // trouvait plus boot/grub/i386-pc, devenu I386_PC en ISO9660 strict).
+        var targetBootRecordSector = FindBootRecordVolumeDescriptor(targetIsoStream) ?? bootCatalog.BootRecordSector;
+        WriteSector(targetIsoStream, targetBootRecordSector, bootRecord);
         WriteSector(targetIsoStream, appendSector, catalogSector);
 
         foreach (var (newLba, data) in relocatedImages)

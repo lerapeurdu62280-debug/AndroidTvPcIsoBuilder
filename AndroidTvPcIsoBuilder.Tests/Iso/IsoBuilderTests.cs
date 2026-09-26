@@ -245,6 +245,202 @@ public class IsoBuilderTests
     }
 
     [TestMethod]
+    public async Task BuildAsync_AvecAnimationActivee_AjouteLeProgrammeDeLogoEtSonImage()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        Assert.IsTrue(reader.FileExists("BOOTANIM\\SPLASH.ATVS"));
+        Assert.IsTrue(reader.FileExists("BOOTANIM\\ATVSPLASH"));
+
+        using var programStream = reader.OpenFile("BOOTANIM\\ATVSPLASH", FileMode.Open);
+        var magic = new byte[4];
+        programStream.ReadExactly(magic);
+        CollectionAssert.AreEqual(new byte[] { 0x7F, (byte)'E', (byte)'L', (byte)'F' }, magic, "atvsplash doit être un exécutable Linux (ELF).");
+
+        using var scriptStream = reader.OpenFile("SCRIPTS\\ATVBUILDER", FileMode.Open);
+        StringAssert.Contains(new StreamReader(scriptStream).ReadToEnd(), "$atvb_src/bootanim/atvsplash");
+    }
+
+    private const string IsolinuxMenu = """
+        default vesamenu.c32
+        timeout 600
+        menu background GTV.png
+
+        label Live
+        	menu label Google TV 14 Kernel 6.1
+        	kernel /kernel
+        	append initrd=/initrd.img quiet androidboot.enable_console=1 SRC= DATA=
+
+        label Local
+        	menu label Boot from local drive
+        	kernel chain.c32
+        	append hd0
+        """;
+
+    private void CreateSourceIsoWithBootMenus()
+    {
+        var builder = new CDBuilder { UseJoliet = true, VolumeIdentifier = "ANDROIDTV" };
+        builder.AddFile("KERNEL", new byte[16]);
+        builder.AddFile("syslinux.cfg", System.Text.Encoding.ASCII.GetBytes("DEFAULT loadconfig\nLABEL loadconfig\n  CONFIG /isolinux/syslinux.cfg\n"));
+        builder.AddDirectory("ISOLINUX");
+        builder.AddFile("ISOLINUX\\ISOLINUX.BIN", new byte[2048]);
+        builder.AddFile("ISOLINUX\\syslinux.cfg", System.Text.Encoding.ASCII.GetBytes(IsolinuxMenu));
+        builder.AddDirectory("boot\\grub");
+        builder.AddFile("boot\\grub\\grub.cfg", System.Text.Encoding.ASCII.GetBytes("set timeout=60\nsource /efi/boot/android.cfg\n"));
+        builder.SetBootImage(new MemoryStream(BootImageBytes), BootDeviceEmulation.Diskette1440KiB, 0);
+        builder.Build(_sourceIsoPath);
+    }
+
+    private static string ReadText(CDReader reader, string path)
+    {
+        using var stream = reader.OpenFile(path, FileMode.Open);
+        return new StreamReader(stream).ReadToEnd();
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_AvecAnimation_RemplaceLesMenusParUnDemarrageDirectSilencieux()
+    {
+        CreateSourceIsoWithBootMenus();
+        var project = CreateProject(_outputIsoPath);
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+
+        var isolinux = ReadText(reader, "ISOLINUX\\SYSLINUX.CFG");
+        StringAssert.Contains(isolinux, "timeout 0");
+        StringAssert.Contains(isolinux, "kernel /kernel");
+        StringAssert.Contains(isolinux, "append initrd=/initrd.img androidboot.enable_console=1 SRC= DATA= quiet loglevel=0");
+        Assert.IsFalse(isolinux.Contains("vesamenu"), "Le menu graphique doit disparaître.");
+
+        // Le syslinux.cfg racine ne fait que charger l'autre : il reste tel quel.
+        StringAssert.Contains(ReadText(reader, "SYSLINUX.CFG"), "CONFIG /isolinux/syslinux.cfg");
+
+        var grub = ReadText(reader, "BOOT\\GRUB\\GRUB.CFG");
+        StringAssert.Contains(grub, "set timeout=0");
+        StringAssert.Contains(grub, "linux /kernel androidboot.enable_console=1");
+        StringAssert.Contains(grub, "initrd /initrd.img");
+    }
+
+    /// <summary>ISO démarrée par GRUB seul, comme LineageOS TV x86 (menu BlissOS, pas d'ISOLINUX).</summary>
+    private void CreateSourceIsoWithGrubOnly()
+    {
+        var builder = new CDBuilder { UseJoliet = true, VolumeIdentifier = "ANDROIDTV" };
+        builder.AddFile("kernel", new byte[16]);
+        builder.AddDirectory("boot\\grub");
+        builder.AddFile("boot\\grub\\grub.cfg", System.Text.Encoding.ASCII.GetBytes(SilentBootConfigTests.LineageOsGrubConfig.Replace("\r\n", "\n")));
+        builder.SetBootImage(new MemoryStream(BootImageBytes), BootDeviceEmulation.Diskette1440KiB, 0);
+        builder.Build(_sourceIsoPath);
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_IsoGrubSeul_RemplaceLeMenuGrubParUnDemarrageDirect()
+    {
+        CreateSourceIsoWithGrubOnly();
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(CreateProject(_outputIsoPath), _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var grub = ReadText(new CDReader(outputStream, joliet: true), "BOOT\\GRUB\\GRUB.CFG");
+        StringAssert.Contains(grub, "set timeout=0");
+        StringAssert.Contains(grub, "linux /kernel root=/dev/ram0 androidboot.live=true ROOT=LABEL=LineageOS_20260331 quiet");
+        StringAssert.Contains(grub, "initrd /initrd.img");
+        Assert.IsFalse(grub.Contains("functions.cfg"), "Le menu d'origine ne doit plus être chargé.");
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_AvecCatalogueDeBoot_ConserveLeDescripteurJoliet()
+    {
+        CreateSourceIsoWithGrubOnly();
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(CreateProject(_outputIsoPath), _sourceIsoPath);
+
+        var descriptorTypes = new List<byte>();
+        await using (var stream = File.OpenRead(_outputIsoPath))
+        {
+            var sector = new byte[2048];
+            for (var i = 16; ; i++)
+            {
+                stream.Seek(i * 2048L, SeekOrigin.Begin);
+                stream.ReadExactly(sector);
+                descriptorTypes.Add(sector[0]);
+                if (sector[0] == 255)
+                    break;
+            }
+        }
+        CollectionAssert.Contains(descriptorTypes, (byte)0, "Boot Record El Torito absent.");
+        CollectionAssert.Contains(descriptorTypes, (byte)2, "Descripteur Joliet écrasé : GRUB ne trouverait plus boot/grub/i386-pc.");
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        Assert.IsTrue(new CDReader(outputStream, joliet: true).DirectoryExists("boot\\grub"), "Les noms Joliet doivent rester lisibles.");
+    }
+
+    /// <summary>GRUB compare les noms Joliet tels quels : "kernel." ne correspond pas à "/kernel".</summary>
+    [TestMethod]
+    public async Task BuildAsync_FichierSansExtension_NomJolietSansPointFinal()
+    {
+        CreateSourceIsoWithGrubOnly();
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(CreateProject(_outputIsoPath), _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var names = new CDReader(outputStream, joliet: true).Root.GetFiles().Select(f => f.Name).ToList();
+        CollectionAssert.Contains(names, "kernel");
+        Assert.IsFalse(names.Any(n => n.EndsWith('.')), string.Join(", ", names));
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_ConserveLeNomEtLesDatesDuVolumeSource()
+    {
+        CreateSourceIsoWithBoot();
+        // Nom hors "d-characters" (minuscules, point), comme "LineageOS_21.0" : écrit en binaire.
+        byte[] sourceDates;
+        await using (var source = File.Open(_sourceIsoPath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            var dates = Enumerable.Range(0, 68).Select(i => (byte)('0' + i % 10)).ToArray();
+            VolumeIdentityPreserver.Apply(source, new VolumeIdentity("LineageOS_21.0", dates));
+            sourceDates = VolumeIdentityPreserver.Read(source)!.Dates;
+        }
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(CreateProject(_outputIsoPath), _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var identity = VolumeIdentityPreserver.Read(outputStream);
+        Assert.IsNotNull(identity);
+        Assert.AreEqual("LineageOS_21.0", identity.Label);
+        CollectionAssert.AreEqual(sourceDates, identity.Dates);
+        Assert.AreEqual("LineageOS_21.0", new CDReader(outputStream, joliet: true).VolumeLabel, "Le nom Joliet doit suivre.");
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_SansAnimation_ConserveLesMenusDOrigine()
+    {
+        CreateSourceIsoWithBootMenus();
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        StringAssert.Contains(ReadText(reader, "ISOLINUX\\SYSLINUX.CFG"), "vesamenu.c32");
+        StringAssert.Contains(ReadText(reader, "BOOT\\GRUB\\GRUB.CFG"), "set timeout=60");
+    }
+
+    [TestMethod]
     [DataRow(@"C:\Apps\youtube.apk", "youtube.apk")]
     [DataRow(@"C:\Apps\Mon Appli (v2).APK", "Mon_Appli__v2.apk")]
     [DataRow(@"C:\Apps\Télé à la carte.apk", "Tele_a_la_carte.apk")]

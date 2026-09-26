@@ -1,0 +1,5 @@
+# Scripts exécutés par le shell Linux de l'initrd / sous WSL : toujours LF.
+*.sh text eol=lf
+*.c text eol=lf
+# Binaire Linux embarqué (logo de démarrage).
+AndroidTvPcIsoBuilder.Infrastructure/Assets/Splash/atvsplash binary

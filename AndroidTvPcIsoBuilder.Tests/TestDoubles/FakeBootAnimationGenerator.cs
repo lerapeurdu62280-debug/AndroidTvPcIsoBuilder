@@ -35,4 +35,17 @@ public class FakeBootAnimationGenerator : IBootAnimationGenerator
         File.WriteAllBytes(_pathToReturn, new byte[] { 1, 2, 3, 4 });
         return Task.FromResult(Result<string>.Success(_pathToReturn));
     }
+
+    public string SplashPathToReturn { get; } = Path.Combine(Path.GetTempPath(), $"fake-splash-{Guid.NewGuid()}.atvs");
+
+    public bool SplashShouldFail { get; set; }
+
+    public Task<Result<string>> GenerateSplashImageAsync(BootAnimationConfig config, string outputDirectory, CancellationToken cancellationToken = default)
+    {
+        if (SplashShouldFail)
+            return Task.FromResult(Result<string>.Failure("Échec simulé de génération du logo de démarrage."));
+
+        File.WriteAllBytes(SplashPathToReturn, "ATVS"u8.ToArray());
+        return Task.FromResult(Result<string>.Success(SplashPathToReturn));
+    }
 }
