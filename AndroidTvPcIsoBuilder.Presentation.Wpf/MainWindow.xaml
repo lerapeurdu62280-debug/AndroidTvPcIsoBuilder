@@ -258,7 +258,7 @@
                                             <StackPanel>
                                                 <CheckBox Content="ISO de diagnostic" IsChecked="{Binding DiagnosticMode}" />
                                                 <TextBlock TextWrapping="Wrap" Opacity="0.7" Margin="0,6,0,0"
-                                                           Text="Pour le dépannage : pendant 10 minutes après le démarrage, l'ISO enregistre l'état d'Android (affichage, souris, Wi-Fi, processeur, journaux) sur une clé USB FAT32 ou exFAT qui contient un dossier ATVLOGS à la racine." />
+                                                           Text="Pour le dépannage : pendant 10 minutes après le démarrage, l'ISO enregistre l'état d'Android (affichage, souris, Wi-Fi, processeur, journaux) sur une clé USB (FAT32, exFAT ou NTFS) qui contient un dossier ATVLOGS à la racine." />
                                             </StackPanel>
                                         </Border>
 

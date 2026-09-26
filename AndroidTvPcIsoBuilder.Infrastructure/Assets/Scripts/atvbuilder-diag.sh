@@ -3,7 +3,7 @@
 #
 # Service d'init « atvdiag » démarré en fin de démarrage (voir atvbuilder-boot.sh), en
 # root. Copie l'état du système (affichage, souris, Wi-Fi, journaux) sur une clé USB
-# contenant un dossier ATVLOGS à la racine (FAT32 ou exFAT), en plusieurs relevés pendant
+# contenant un dossier ATVLOGS à la racine (FAT32, exFAT ou NTFS), en plusieurs relevés pendant
 # 10 minutes pour que l'utilisateur ait le temps de bouger la souris et d'essayer le Wi-Fi.
 # Seules les partitions contenant ce dossier sont utilisées (démontées sinon).
 
@@ -16,14 +16,19 @@ tries=0
 while [ -z "$out" ] && [ $tries -lt 24 ]; do
 	for dev in /dev/block/sd[a-z]* /dev/block/mmcblk[0-9]*p* /dev/block/nvme*p*; do
 		[ -b "$dev" ] || continue
-		for fs in vfat exfat; do
-			if mount -t $fs "$dev" $mnt 2> /dev/null; then
-				for name in ATVLOGS atvlogs Atvlogs; do
-					[ -d $mnt/$name ] && out=$mnt/$name && break
-				done
-				[ -n "$out" ] && break 2
-				umount $mnt
+		for fs in vfat exfat ntfs3 ntfs-3g; do
+			# ntfs-3g : binaire FUSE fourni par android-x86 quand le noyau n'a pas ntfs3.
+			if [ $fs = ntfs-3g ]; then
+				command -v ntfs-3g > /dev/null || continue
+				ntfs-3g "$dev" $mnt 2> /dev/null || continue
+			elif ! mount -t $fs "$dev" $mnt 2> /dev/null; then
+				continue
 			fi
+			for name in ATVLOGS atvlogs Atvlogs; do
+				[ -d $mnt/$name ] && out=$mnt/$name && break
+			done
+			[ -n "$out" ] && break 2
+			umount $mnt
 		done
 	done
 	[ -z "$out" ] && tries=$((tries + 1)) && sleep 5
