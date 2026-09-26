@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Application.Services;
@@ -53,6 +53,19 @@ public partial class ProjectEditorViewModel : ObservableObject
 
     [ObservableProperty]
     private string _playStoreApkPath = string.Empty;
+
+    [ObservableProperty]
+    private bool _playStoreEnabled;
+
+    [ObservableProperty]
+    private bool _aptoideTvEnabled;
+
+    /// <summary>Vide : dernière version téléchargée depuis le serveur officiel d'Aptoide.</summary>
+    [ObservableProperty]
+    private string _aptoideTvApkPath = string.Empty;
+
+    [ObservableProperty]
+    private bool _diagnosticMode;
 
     [ObservableProperty]
     private bool _isLoaded;
@@ -110,6 +123,10 @@ public partial class ProjectEditorViewModel : ObservableObject
         GoogleServicesEnabled = project.GoogleServices.Enabled;
         GoogleDonorIsoPath = project.GoogleServices.DonorIsoPath ?? string.Empty;
         PlayStoreApkPath = project.GoogleServices.PlayStoreApkPath ?? string.Empty;
+        PlayStoreEnabled = !string.IsNullOrWhiteSpace(project.GoogleServices.PlayStoreApkPath);
+        AptoideTvEnabled = project.AptoideTv.Enabled;
+        AptoideTvApkPath = project.AptoideTv.ApkPath ?? string.Empty;
+        DiagnosticMode = project.DiagnosticMode;
 
         Apps.Clear();
         foreach (var app in project.Apps)
@@ -152,6 +169,12 @@ public partial class ProjectEditorViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
+        if (GoogleServicesEnabled && PlayStoreEnabled && string.IsNullOrWhiteSpace(PlayStoreApkPath))
+        {
+            _dialogService.ShowError("Enregistrement impossible", "Play Store : choisissez l'APK « Google Play Store (Android TV) », ou décochez l'option.");
+            return;
+        }
+
         var result = await _projectService.UpdateProjectSettingsAsync(
             _projectId,
             name: Name,
@@ -167,8 +190,17 @@ public partial class ProjectEditorViewModel : ObservableObject
             {
                 Enabled = GoogleServicesEnabled,
                 DonorIsoPath = string.IsNullOrWhiteSpace(GoogleDonorIsoPath) ? null : GoogleDonorIsoPath,
-                PlayStoreApkPath = string.IsNullOrWhiteSpace(PlayStoreApkPath) ? null : PlayStoreApkPath
+                PlayStoreApkPath = PlayStoreEnabled && !string.IsNullOrWhiteSpace(PlayStoreApkPath) ? PlayStoreApkPath : null
             });
+        }
+
+        if (result.IsSuccess)
+        {
+            result = await _projectService.UpdateExtrasAsync(_projectId, new AptoideTvConfig
+            {
+                Enabled = AptoideTvEnabled,
+                ApkPath = string.IsNullOrWhiteSpace(AptoideTvApkPath) ? null : AptoideTvApkPath
+            }, DiagnosticMode);
         }
 
         if (!result.IsSuccess)
@@ -203,6 +235,14 @@ public partial class ProjectEditorViewModel : ObservableObject
         var path = _dialogService.PickFile("Sélectionnez l'APK « Google Play Store (Android TV) »", "Application Android (*.apk)|*.apk");
         if (path is not null)
             PlayStoreApkPath = path;
+    }
+
+    [RelayCommand]
+    private void BrowseAptoideTvApkPath()
+    {
+        var path = _dialogService.PickFile("Sélectionnez l'APK Aptoide TV (facultatif)", "Application Android (*.apk)|*.apk");
+        if (path is not null)
+            AptoideTvApkPath = path;
     }
 
     [RelayCommand]
@@ -287,7 +327,11 @@ public partial class ProjectEditorViewModel : ObservableObject
 
         try
         {
-            var result = await _buildOrchestrationService.BuildAsync(_projectId, SourceIsoPath, progress, _buildCancellation.Token);
+            // Hors du thread de l'interface (longues portions synchrones dans l'assemblage de l'ISO).
+            var projectId = _projectId;
+            var sourceIsoPath = SourceIsoPath;
+            var token = _buildCancellation.Token;
+            var result = await Task.Run(() => _buildOrchestrationService.BuildAsync(projectId, sourceIsoPath, progress, token));
 
             if (!result.IsSuccess)
             {

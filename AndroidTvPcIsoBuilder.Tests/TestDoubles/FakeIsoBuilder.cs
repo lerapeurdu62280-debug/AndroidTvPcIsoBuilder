@@ -1,4 +1,4 @@
-using AndroidTvPcIsoBuilder.Application.Interfaces;
+﻿using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Application.Services;
 using AndroidTvPcIsoBuilder.Domain.Entities;
 
@@ -7,6 +7,7 @@ namespace AndroidTvPcIsoBuilder.Tests.TestDoubles;
 public class FakeIsoBuilder : IIsoBuilder
 {
     public bool WasCalled { get; private set; }
+    public List<string> AppNamesAtBuild { get; } = new();
     public Exception? ExceptionToThrow { get; set; }
     public BuildVerification VerificationResult { get; set; } = new(true, true, 0, 0, 1024, Array.Empty<string>());
 
@@ -17,6 +18,7 @@ public class FakeIsoBuilder : IIsoBuilder
         CancellationToken cancellationToken = default)
     {
         WasCalled = true;
+        AppNamesAtBuild.AddRange(project.Apps.Select(a => a.Name));
         if (ExceptionToThrow is not null)
             throw ExceptionToThrow;
 

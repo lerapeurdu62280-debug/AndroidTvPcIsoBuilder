@@ -1,4 +1,4 @@
-using AndroidTvPcIsoBuilder.Application.Common;
+﻿using AndroidTvPcIsoBuilder.Application.Common;
 using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Domain.Entities;
 
@@ -34,6 +34,8 @@ public class ProjectValidator
             errors.Add($"La résolution '{project.Resolution}' est invalide. Format attendu : LARGEURxHAUTEUR (ex: 1920x1080).");
 
         errors.AddRange(ValidateGoogleServices(project.GoogleServices));
+        if (project.AptoideTv.Enabled && !string.IsNullOrWhiteSpace(project.AptoideTv.ApkPath) && !_fileSystem.FileExists(project.AptoideTv.ApkPath))
+            errors.Add($"Aptoide TV : l'APK '{project.AptoideTv.ApkPath}' est introuvable.");
 
         foreach (var app in project.Apps)
         {

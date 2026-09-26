@@ -203,6 +203,63 @@ public class IsoBuilderTests
     }
 
     [TestMethod]
+    public async Task BuildAsync_ModeDiagnostic_AjouteLeScriptDeReleves()
+    {
+        CreateSourceIsoWithBoot();
+        var project = CreateProject(_outputIsoPath);
+        project.BootAnimation.Enabled = false;
+        project.Language = "";
+        project.DiagnosticMode = true;
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+
+        await builder.BuildAsync(project, _sourceIsoPath);
+
+        await using var outputStream = File.OpenRead(_outputIsoPath);
+        var reader = new CDReader(outputStream, joliet: true);
+        Assert.IsTrue(reader.FileExists("SCRIPTS\\ATVBUILDER"));
+        using var diagStream = reader.OpenFile("DIAG\\ATVDIAG.SH", FileMode.Open);
+        using var diagReader = new StreamReader(diagStream);
+        var diag = diagReader.ReadToEnd();
+        StringAssert.Contains(diag, "ATVLOGS");
+        Assert.IsFalse(diag.Contains('\r'));
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_SourceDejaGeneree_RefaitLesAjoutsSansDoublon()
+    {
+        CreateSourceIsoWithBoot();
+        var firstProject = CreateProject(_outputIsoPath);
+        firstProject.BootAnimation.Enabled = false;
+        firstProject.Language = "fr-FR";
+        firstProject.DiagnosticMode = true;
+        var builder = new IsoBuilder(new FakeBootAnimationGenerator());
+        await builder.BuildAsync(firstProject, _sourceIsoPath);
+
+        var secondOutput = Path.ChangeExtension(_outputIsoPath, ".2.iso");
+        try
+        {
+            var secondProject = CreateProject(secondOutput);
+            secondProject.BootAnimation.Enabled = false;
+            secondProject.Language = "en-GB";
+
+            await builder.BuildAsync(secondProject, _outputIsoPath);
+
+            await using var outputStream = File.OpenRead(secondOutput);
+            var reader = new CDReader(outputStream, joliet: true);
+            Assert.IsTrue(reader.FileExists("KERNEL"));
+            Assert.IsTrue(reader.FileExists("SCRIPTS\\ATVBUILDER"));
+            Assert.IsFalse(reader.DirectoryExists("DIAG"));
+            using var propStream = reader.OpenFile("LOCALE\\LOCALE.PROP", FileMode.Open);
+            using var propReader = new StreamReader(propStream);
+            StringAssert.Contains(propReader.ReadToEnd(), "persist.sys.locale=en-GB");
+        }
+        finally
+        {
+            File.Delete(secondOutput);
+        }
+    }
+
+    [TestMethod]
     public async Task BuildAsync_EnFrancais_AjouteLangueFuseauClavierAzertyEtScript()
     {
         CreateSourceIsoWithBoot();

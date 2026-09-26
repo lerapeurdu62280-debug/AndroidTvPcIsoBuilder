@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Application.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -60,7 +60,12 @@ public partial class BuildWizardViewModel : ObservableObject
         var bootMode = _targetSelectionViewModel.BootMode;
 
         var projectName = $"Projet Android TV {DateTime.Now:yyyy-MM-dd HH:mm}";
-        var outputIsoPath = Path.Combine(Path.GetTempPath(), $"androidtv-{Guid.NewGuid():N}.iso");
+        // L'ISO produite est rangée à côté de l'ISO source (Documents si la source reste à
+        // télécharger), jamais dans le dossier temporaire où l'utilisateur ne la trouverait pas.
+        var outputDirectory = Path.GetDirectoryName(sourceIsoSelection.LocalPath);
+        if (string.IsNullOrEmpty(outputDirectory))
+            outputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        var outputIsoPath = Path.Combine(outputDirectory, $"AndroidTV-{DateTime.Now:yyyyMMdd-HHmmss}.iso");
 
         var createResult = await _projectService.CreateProjectAsync(projectName, outputIsoPath);
         if (!createResult.IsSuccess)
@@ -73,6 +78,8 @@ public partial class BuildWizardViewModel : ObservableObject
         await _projectRepository.SaveAsync(project);
 
         _liveBuildViewModel.ProjectId = project.Id;
+        _liveBuildViewModel.OutputIsoPath = outputIsoPath;
         CurrentStep = _liveBuildViewModel;
+        await _liveBuildViewModel.StartBuildCommand.ExecuteAsync(null);
     }
 }

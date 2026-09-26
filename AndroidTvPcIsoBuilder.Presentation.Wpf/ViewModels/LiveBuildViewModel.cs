@@ -1,3 +1,5 @@
+﻿using System.Diagnostics;
+using System.IO;
 using System.Collections.ObjectModel;
 using System.Windows;
 using AndroidTvPcIsoBuilder.Application.Services;
@@ -29,6 +31,9 @@ public partial class LiveBuildViewModel : ObservableObject
     /// d'appeler <see cref="StartBuildCommand"/>.
     /// </summary>
     public Guid? ProjectId { get; set; }
+
+    /// <summary>Chemin de l'ISO produite, affiché (et ouvert dans l'Explorateur) en fin de build.</summary>
+    public string? OutputIsoPath { get; set; }
 
     public ObservableCollection<PipelineStepRow> PipelineSteps { get; } = new(PipelineStepRow.CreateDefaultPipeline());
 
@@ -111,8 +116,32 @@ public partial class LiveBuildViewModel : ObservableObject
         var succeeded = false;
         try
         {
-            var result = await _pipelineService.RunAsync(ProjectId.Value, progress, _buildCancellation.Token);
+            // Hors du thread de l'interface : la lecture et l'assemblage de l'ISO ont de longues
+            // portions synchrones qui figeraient la fenêtre (progression bloquée à 0 %).
+            var projectId = ProjectId.Value;
+            var token = _buildCancellation.Token;
+            var result = await Task.Run(() => _pipelineService.RunAsync(projectId, progress, token));
             succeeded = result.IsSuccess;
+
+            if (succeeded)
+            {
+                OverallPercent = 100;
+                CurrentMilestoneLabel = GetMilestoneLabel(BuildMilestone.Done);
+                LogLines.Add($"ISO générée : {OutputIsoPath}");
+                if (OutputIsoPath is not null && File.Exists(OutputIsoPath))
+                    Process.Start("explorer.exe", $"/select,\"{OutputIsoPath}\"");
+            }
+            else
+            {
+                CurrentMilestoneLabel = "Échec de la génération";
+                foreach (var error in result.Errors)
+                    LogLines.Add($"ERREUR : {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            CurrentMilestoneLabel = "Échec de la génération";
+            LogLines.Add($"ERREUR : {ex.Message}");
         }
         finally
         {

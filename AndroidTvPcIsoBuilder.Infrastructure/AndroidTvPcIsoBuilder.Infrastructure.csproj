@@ -40,6 +40,8 @@
          l'extension ".sh" du nom de fichier comme un code de culture (le Sindhi, "sh") et embarque
          le fichier dans un assembly satellite au lieu de l'assembly principal. -->
     <EmbeddedResource Include="Assets\Scripts\atvbuilder-boot.sh" WithCulture="false" LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh" />
+    <!-- Relevés de diagnostic sur clé USB (AndroidTvProject.DiagnosticMode). -->
+    <EmbeddedResource Include="Assets\Scripts\atvbuilder-diag.sh" WithCulture="false" LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-diag.sh" />
     <!-- Logo par défaut de l'animation de démarrage (voir BootAnimationGenerator). -->
     <EmbeddedResource Include="Assets\BootAnimation\androidtv-logo.png" LogicalName="AndroidTvPcIsoBuilder.Infrastructure.Assets.BootAnimation.androidtv-logo.png" />
     <!-- Programme Linux (x86_64, statique) qui anime le logo avant Android. Compilé depuis

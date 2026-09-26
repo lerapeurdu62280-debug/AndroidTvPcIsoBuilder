@@ -70,7 +70,50 @@ public class GoogleServicesExtractor : IGoogleServicesExtractor
             File.Copy(config.PlayStoreApkPath!, target, overwrite: true);
         }
 
+        try
+        {
+            WritePrivilegedPermissionAllowlists(outputDirectory);
+        }
+        catch (InvalidDataException ex)
+        {
+            return Result<string>.Failure($"APK illisible parmi les services Google : {ex.Message}");
+        }
+
         return Result<string>.Success(outputDirectory);
+    }
+
+    /// <summary>
+    /// Autorise chaque application privilégiée greffée à recevoir les permissions qu'elle demande.
+    /// Sans ça, une application plus récente que les listes de la donneuse (ex. un Play Store
+    /// fourni à part) demande des permissions privilégiées non listées, et Android refuse de
+    /// démarrer (ro.control_privapp_permissions=enforce : system_server s'arrête en boucle).
+    /// Les listes d'un même paquet se cumulent, lister une permission non privilégiée est sans effet.
+    /// </summary>
+    private static void WritePrivilegedPermissionAllowlists(string outputDirectory)
+    {
+        foreach (var partition in Partitions)
+        {
+            var privApp = Path.Combine(outputDirectory, partition, "priv-app");
+            if (!Directory.Exists(privApp))
+                continue;
+
+            foreach (var apk in Directory.GetDirectories(privApp).SelectMany(d => Directory.GetFiles(d, "*.apk")))
+            {
+                var manifest = ApkManifestReader.Read(apk);
+                var xml = new System.Text.StringBuilder()
+                    .Append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
+                    .Append("<!-- Généré par AndroidTvPcIsoBuilder d'après le manifeste de l'APK. -->\n")
+                    .Append("<permissions>\n")
+                    .Append("    <privapp-permissions package=\"").Append(manifest.PackageName).Append("\">\n");
+                foreach (var permission in manifest.Permissions)
+                    xml.Append("        <permission name=\"").Append(System.Security.SecurityElement.Escape(permission)).Append("\"/>\n");
+                xml.Append("    </privapp-permissions>\n</permissions>\n");
+
+                var target = Path.Combine(outputDirectory, partition, "etc", "permissions", $"privapp-permissions-atvbuilder-{manifest.PackageName}.xml");
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllText(target, xml.ToString(), new System.Text.UTF8Encoding(false));
+            }
+        }
     }
 
     private static Result ExtractFromDonor(string donorIsoPath, string outputDirectory, CancellationToken cancellationToken)

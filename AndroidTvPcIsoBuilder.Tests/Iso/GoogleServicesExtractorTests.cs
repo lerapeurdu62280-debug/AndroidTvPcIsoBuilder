@@ -1,4 +1,4 @@
-using AndroidTvPcIsoBuilder.Domain.Entities;
+﻿using AndroidTvPcIsoBuilder.Domain.Entities;
 using AndroidTvPcIsoBuilder.Infrastructure.Iso;
 using DiscUtils.Iso9660;
 using DiscUtils.SquashFs;
@@ -32,7 +32,9 @@ public class GoogleServicesExtractorTests
         var squash = new SquashFileSystemBuilder();
         squash.AddFile("system\\build.prop", "ro.build.version.sdk=34"u8.ToArray());
         foreach (var file in systemFiles)
-            squash.AddFile("system\\" + file, new byte[] { 1, 2, 3 });
+            squash.AddFile("system\\" + file, file.EndsWith(".apk")
+                ? TestApk.Create("com.test." + Path.GetFileNameWithoutExtension(file).ToLowerInvariant(), "android.permission.INTERNET")
+                : new byte[] { 1, 2, 3 });
         using var sfs = new MemoryStream();
         squash.Build(sfs);
 
@@ -74,10 +76,13 @@ public class GoogleServicesExtractorTests
             "etc/permissions/privapp-permissions-google-system.xml",
             "product/etc/default-permissions/google-default-permissions.xml",
             "product/etc/permissions/privapp-permissions-atv-product.xml",
+            "product/etc/permissions/privapp-permissions-atvbuilder-com.test.katnissprebuilt.xml",
+            "product/etc/permissions/privapp-permissions-atvbuilder-com.test.prebuiltgmscorepano.xml",
             "product/etc/permissions/privapp-permissions-google-product.xml",
             "product/etc/sysconfig/google.xml",
             "product/priv-app/KatnissPrebuilt/KatnissPrebuilt.apk",
             "product/priv-app/PrebuiltGmsCorePano/PrebuiltGmsCorePano.apk",
+            "system_ext/etc/permissions/privapp-permissions-atvbuilder-com.test.googleservicesframework.xml",
             "system_ext/priv-app/GoogleServicesFramework/GoogleServicesFramework.apk",
         }, files);
     }
@@ -97,13 +102,21 @@ public class GoogleServicesExtractorTests
     {
         var donor = CreateDonorIso("product\\priv-app\\PrebuiltGmsCorePano\\PrebuiltGmsCorePano.apk");
         var playStore = Path.Combine(_tempDirectory, "play-store-tv.apk");
-        await File.WriteAllBytesAsync(playStore, new byte[] { (byte)'P', (byte)'K', 3, 4, 0 });
+        await File.WriteAllBytesAsync(playStore, TestApk.Create("com.android.vending",
+            "android.permission.INTERNET", "android.permission.READ_SYSTEM_GRAMMATICAL_GENDER"));
 
         var result = await new GoogleServicesExtractor().ExtractAsync(
             new GoogleServicesConfig { Enabled = true, DonorIsoPath = donor, PlayStoreApkPath = playStore }, _outputDirectory);
 
         Assert.IsTrue(result.IsSuccess, string.Join(" ", result.Errors));
         Assert.IsTrue(File.Exists(Path.Combine(_outputDirectory, "product", "priv-app", "Phonesky", "Phonesky.apk")));
+
+        // Permissions privilégiées d'un Play Store plus récent que la donneuse : autorisées d'après
+        // son manifeste, sinon Android refuse de démarrer.
+        var allowlist = File.ReadAllText(Path.Combine(_outputDirectory, "product", "etc", "permissions",
+            "privapp-permissions-atvbuilder-com.android.vending.xml"));
+        StringAssert.Contains(allowlist, "<privapp-permissions package=\"com.android.vending\">");
+        StringAssert.Contains(allowlist, "<permission name=\"android.permission.READ_SYSTEM_GRAMMATICAL_GENDER\"/>");
     }
 
     [TestMethod]

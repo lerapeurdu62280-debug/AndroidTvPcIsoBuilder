@@ -87,4 +87,39 @@ public class BuildOrchestrationServiceTests
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual(project.Value.Id, result.Value.Id);
     }
+
+    [TestMethod]
+    public async Task BuildAsync_AvecAptoideTv_LAjouteLeTempsDeLaGenerationSeulement()
+    {
+        _fileSystem.AddFile(SourceIsoPath);
+        var orchestrator = new BuildOrchestrationService(_repository, _isoBuilder, new ProjectValidator(_fileSystem), _fileSystem, new FakeAptoideTvProvider());
+        var projectService = new ProjectService(_repository);
+        var project = await projectService.CreateProjectAsync("Projet", "C:\\Output\\out.iso");
+        await projectService.UpdateProjectSettingsAsync(project.Value.Id, sourceIsoLocalPath: SourceIsoPath);
+        await projectService.UpdateExtrasAsync(project.Value.Id, new() { Enabled = true }, diagnosticMode: false);
+
+        var result = await orchestrator.BuildAsync(project.Value.Id, SourceIsoPath);
+
+        Assert.IsTrue(result.IsSuccess, string.Join(" ", result.Errors));
+        CollectionAssert.Contains(_isoBuilder.AppNamesAtBuild, "Aptoide TV");
+        var saved = await _repository.GetByIdAsync(project.Value.Id);
+        Assert.AreEqual(0, saved!.Apps.Count);
+    }
+
+    [TestMethod]
+    public async Task BuildAsync_AptoideTvIndisponible_EchoueSansAppelerLeBuilder()
+    {
+        _fileSystem.AddFile(SourceIsoPath);
+        var provider = new FakeAptoideTvProvider { ResultToReturn = Application.Common.Result<string>.Failure("hors ligne") };
+        var orchestrator = new BuildOrchestrationService(_repository, _isoBuilder, new ProjectValidator(_fileSystem), _fileSystem, provider);
+        var projectService = new ProjectService(_repository);
+        var project = await projectService.CreateProjectAsync("Projet", "C:\\Output\\out.iso");
+        await projectService.UpdateProjectSettingsAsync(project.Value.Id, sourceIsoLocalPath: SourceIsoPath);
+        await projectService.UpdateExtrasAsync(project.Value.Id, new() { Enabled = true }, diagnosticMode: false);
+
+        var result = await orchestrator.BuildAsync(project.Value.Id, SourceIsoPath);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsFalse(_isoBuilder.WasCalled);
+    }
 }

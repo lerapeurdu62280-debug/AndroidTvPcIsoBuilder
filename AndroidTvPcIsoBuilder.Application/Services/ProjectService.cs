@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using AndroidTvPcIsoBuilder.Application.Common;
 using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Domain.Entities;
@@ -72,6 +72,23 @@ public class ProjectService
             return Result<AndroidTvProject>.Failure($"Aucun projet trouvé avec l'identifiant '{projectId}'.");
 
         project.GoogleServices = googleServices;
+        await _repository.SaveAsync(project, cancellationToken);
+        return Result<AndroidTvProject>.Success(project);
+    }
+
+    /// <summary>Enregistre les options de magasin Aptoide TV et d'ISO de diagnostic.</summary>
+    public async Task<Result<AndroidTvProject>> UpdateExtrasAsync(
+        Guid projectId,
+        AptoideTvConfig aptoideTv,
+        bool diagnosticMode,
+        CancellationToken cancellationToken = default)
+    {
+        var project = await _repository.GetByIdAsync(projectId, cancellationToken);
+        if (project is null)
+            return Result<AndroidTvProject>.Failure($"Aucun projet trouvé avec l'identifiant '{projectId}'.");
+
+        project.AptoideTv = aptoideTv;
+        project.DiagnosticMode = diagnosticMode;
         await _repository.SaveAsync(project, cancellationToken);
         return Result<AndroidTvProject>.Success(project);
     }

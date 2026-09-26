@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Windows;
 using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Application.Services;
@@ -49,6 +49,7 @@ namespace AndroidTvPcIsoBuilder.Presentation.Wpf
                 Timeout = TimeSpan.FromHours(2)
             });
             services.AddSingleton<IFileDownloader, HttpFileDownloader>();
+            services.AddSingleton<IAptoideTvProvider, AptoideTvProvider>();
             services.AddSingleton<IIsoDownloadService, HttpIsoDownloadService>();
             services.AddSingleton<IsoDownloadOrchestrationService>();
             services.AddSingleton<IAppCatalogService, FDroidAppCatalogService>();

@@ -15,6 +15,13 @@ public class AndroidTvProject
     public List<AppPackage> Apps { get; set; } = new();
 
     public GoogleServicesConfig GoogleServices { get; set; } = new();
+    public AptoideTvConfig AptoideTv { get; set; } = new();
+
+    /// <summary>
+    /// ISO de diagnostic : au démarrage, copie l'état d'Android (affichage, souris, Wi-Fi,
+    /// journaux) sur une clé USB contenant un dossier ATVLOGS. Pour le dépannage uniquement.
+    /// </summary>
+    public bool DiagnosticMode { get; set; }
     public List<BuildHistoryEntry> BuildHistory { get; set; } = new();
 }
 

@@ -1,4 +1,4 @@
-using AndroidTvPcIsoBuilder.Application.Common;
+﻿using AndroidTvPcIsoBuilder.Application.Common;
 using AndroidTvPcIsoBuilder.Application.Interfaces;
 using AndroidTvPcIsoBuilder.Application.Validation;
 using AndroidTvPcIsoBuilder.Domain.Entities;
@@ -13,13 +13,16 @@ public class BuildOrchestrationService
     private readonly IIsoBuilder _isoBuilder;
     private readonly ProjectValidator _validator;
     private readonly IFileSystem _fileSystem;
+    private readonly IAptoideTvProvider? _aptoideTvProvider;
 
-    public BuildOrchestrationService(IProjectRepository repository, IIsoBuilder isoBuilder, ProjectValidator validator, IFileSystem fileSystem)
+    public BuildOrchestrationService(IProjectRepository repository, IIsoBuilder isoBuilder, ProjectValidator validator, IFileSystem fileSystem,
+        IAptoideTvProvider? aptoideTvProvider = null)
     {
         _repository = repository;
         _isoBuilder = isoBuilder;
         _validator = validator;
         _fileSystem = fileSystem;
+        _aptoideTvProvider = aptoideTvProvider;
     }
 
     /// <summary>
@@ -55,23 +58,44 @@ public class BuildOrchestrationService
 
         progress?.Report(new BuildProgress("Démarrage", 0, $"Construction de l'ISO pour le projet '{project.Name}'."));
 
+        // Aptoide TV : ajouté le temps de la génération aux applications installées au premier
+        // démarrage (retiré avant l'enregistrement du projet, il n'apparaît pas dans sa liste).
+        AppPackage? aptoideTvApp = null;
+        if (project.AptoideTv.Enabled)
+        {
+            if (_aptoideTvProvider is null)
+                return Result.Failure("Aptoide TV : fournisseur non configuré.");
+
+            progress?.Report(new BuildProgress("Préparation d'Aptoide TV", 2));
+            var workDirectory = Path.Combine(Path.GetTempPath(), "AndroidTvPcIsoBuilder", "AptoideTv");
+            var apk = await _aptoideTvProvider.GetApkAsync(project.AptoideTv, workDirectory, cancellationToken);
+            if (!apk.IsSuccess)
+                return Result.Failure(apk.Errors);
+
+            aptoideTvApp = new AppPackage { Name = "Aptoide TV", SourceApkPath = apk.Value! };
+            project.Apps.Add(aptoideTvApp);
+        }
+
         try
         {
             await _isoBuilder.BuildAsync(project, sourceIsoPath, progress, cancellationToken);
         }
         catch (OperationCanceledException)
         {
+            RemoveTemporaryApp(project, aptoideTvApp);
             await RecordBuildHistoryAsync(project, succeeded: false, "Annulée par l'utilisateur.", cancellationToken);
             return Result.Failure("La construction de l'ISO a été annulée.");
         }
         catch (Exception ex)
         {
+            RemoveTemporaryApp(project, aptoideTvApp);
             await RecordBuildHistoryAsync(project, succeeded: false, $"Échec : {ex.Message}", cancellationToken);
             return Result.Failure($"Échec de la construction de l'ISO : {ex.Message}");
         }
 
         progress?.Report(new BuildProgress("Vérification de l'image générée", 98));
         var verification = _isoBuilder.Verify(project);
+        RemoveTemporaryApp(project, aptoideTvApp);
 
         var summary = verification.Issues.Count == 0
             ? $"ISO générée avec succès ({verification.AppsFoundInOutput}/{verification.AppsExpected} applications confirmées)."
@@ -159,5 +183,11 @@ public class BuildOrchestrationService
             unitIndex++;
         }
         return $"{value:0.#} {units[unitIndex]}";
+    }
+
+    private static void RemoveTemporaryApp(AndroidTvProject project, AppPackage? app)
+    {
+        if (app is not null)
+            project.Apps.Remove(app);
     }
 }

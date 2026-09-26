@@ -29,6 +29,10 @@ public class IsoBuilder : IIsoBuilder
     private const string BootScriptDirectory = "scripts";
     private const string BootScriptFileName = "atvbuilder";
     private const string BootScriptResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-boot.sh";
+    private const string DiagnosticDirectory = "diag";
+    private const string BootAnimationDirectory = "bootanim";
+    private const string DiagnosticScriptFileName = "atvdiag.sh";
+    private const string DiagnosticScriptResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.Scripts.atvbuilder-diag.sh";
 
     /// <summary>
     /// Programme qui anime le logo sur le framebuffer avant Android (Assets/Splash/atvsplash.c),
@@ -44,6 +48,13 @@ public class IsoBuilder : IIsoBuilder
     private const string KeyboardFileName = "generic.kcm";
 
     private const string SystemGraftImageFileName = "gapps.sfs";
+
+    /// <summary>Tout ce que ce logiciel ajoute à une ISO (voir BuildAsync).</summary>
+    private static readonly HashSet<string> PreviousBuildPaths = new(StringComparer.OrdinalIgnoreCase)
+    {
+        $"{BootScriptDirectory}\\{BootScriptFileName}",
+        AppsDirectory, BootAnimationDirectory, LocaleDirectory, DiagnosticDirectory, SystemGraftImageFileName,
+    };
 
     private static readonly Dictionary<string, string> TimeZonesByLocale = new()
     {
@@ -113,7 +124,13 @@ public class IsoBuilder : IIsoBuilder
         var googleServicesDirectory = Path.Combine(Path.GetTempPath(), "AndroidTvPcIsoBuilder", "GoogleServices");
         try
         {
-            CopyDirectoryRecursive(reader.Root, builder, openStreams, replacedFiles, cancellationToken);
+            // Source déjà générée par ce logiciel : nos ajouts précédents (script, logo, langue,
+            // services Google...) sont écartés puis refaits d'après le projet, sinon ils seraient
+            // en double dans l'image ou garderaient d'anciens réglages.
+            var excludedPaths = reader.FileExists($"{BootScriptDirectory}\\{BootScriptFileName}")
+                ? PreviousBuildPaths
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CopyDirectoryRecursive(reader.Root, builder, openStreams, replacedFiles, excludedPaths, cancellationToken);
 
             progress?.Report(new BuildProgress("Injection des applications", 60));
 
@@ -134,7 +151,13 @@ public class IsoBuilder : IIsoBuilder
                 graftAdded = AddSystemGraftToImage(builder, extractResult.Value, openStreams);
             }
 
-            if (project.Apps.Count > 0 || bootAnimationAdded || localeAdded || graftAdded)
+            if (project.DiagnosticMode)
+            {
+                builder.AddDirectory(DiagnosticDirectory);
+                builder.AddFile($"{DiagnosticDirectory}\\{DiagnosticScriptFileName}", ReadScriptResource(DiagnosticScriptResourceName));
+            }
+
+            if (project.Apps.Count > 0 || bootAnimationAdded || localeAdded || graftAdded || project.DiagnosticMode)
             {
                 progress?.Report(new BuildProgress("Ajout du script de démarrage", 76));
                 AddBootScriptToImage(builder);
@@ -251,6 +274,7 @@ public class IsoBuilder : IIsoBuilder
         CDBuilder builder,
         List<Stream> openStreams,
         IReadOnlyDictionary<string, byte[]> replacedFiles,
+        IReadOnlySet<string> excludedPaths,
         CancellationToken cancellationToken)
     {
         foreach (var file in sourceDir.GetFiles())
@@ -258,6 +282,8 @@ public class IsoBuilder : IIsoBuilder
             cancellationToken.ThrowIfCancellationRequested();
 
             var imagePath = NormalizeIso9660Name(file.FullName.TrimStart('\\'));
+            if (excludedPaths.Contains(imagePath))
+                continue;
             if (replacedFiles.TryGetValue(imagePath, out var replacement))
             {
                 builder.AddFile(imagePath, replacement);
@@ -273,8 +299,12 @@ public class IsoBuilder : IIsoBuilder
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            builder.AddDirectory(subDir.FullName.TrimStart('\\'));
-            CopyDirectoryRecursive(subDir, builder, openStreams, replacedFiles, cancellationToken);
+            var directoryPath = subDir.FullName.Trim('\\');
+            if (excludedPaths.Contains(directoryPath))
+                continue;
+
+            builder.AddDirectory(directoryPath);
+            CopyDirectoryRecursive(subDir, builder, openStreams, replacedFiles, excludedPaths, cancellationToken);
         }
     }
 
@@ -557,13 +587,17 @@ public class IsoBuilder : IIsoBuilder
     /// </summary>
     private static void AddBootScriptToImage(CDBuilder builder)
     {
-        using var resourceStream = typeof(IsoBuilder).Assembly.GetManifestResourceStream(BootScriptResourceName)
-            ?? throw new InvalidOperationException($"Ressource embarquée introuvable : {BootScriptResourceName}");
+        builder.AddDirectory(BootScriptDirectory);
+        builder.AddFile($"{BootScriptDirectory}\\{BootScriptFileName}", ReadScriptResource(BootScriptResourceName));
+    }
+
+    private static byte[] ReadScriptResource(string resourceName)
+    {
+        using var resourceStream = typeof(IsoBuilder).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Ressource embarquée introuvable : {resourceName}");
         using var resourceReader = new StreamReader(resourceStream, Encoding.UTF8);
         var script = resourceReader.ReadToEnd().Replace("\r\n", "\n");
-
-        builder.AddDirectory(BootScriptDirectory);
-        builder.AddFile($"{BootScriptDirectory}\\{BootScriptFileName}", new UTF8Encoding(false).GetBytes(script));
+        return new UTF8Encoding(false).GetBytes(script);
     }
 
     /// <summary>

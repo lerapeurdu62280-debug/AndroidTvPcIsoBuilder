@@ -108,6 +108,36 @@ atvb_apply_system()
 		fi
 	fi
 
+	# --- ISO de diagnostic : relevés sur clé USB ----------------------------------
+	# Le script de relevés (diag/atvdiag.sh de l'ISO) devient un service d'init, démarré
+	# en fin de démarrage. Lancé depuis init.sh (bootcomplete), il serait tué avec lui :
+	# init supprime tous les processus d'une commande "exec" quand elle se termine.
+	# Le service et le script sont ajoutés à system/etc/init par une couche overlayfs
+	# (en RAM, /tmp survit au switch_root) ; init lit ce dossier après notre passage.
+	# seclabel est obligatoire même en SELinux permissif (sinon init refuse le service).
+	atvb_initdir="$atvb_root"/system/etc/init
+	if [ -f "$atvb_src/diag/atvdiag.sh" ] && [ -d "$atvb_initdir" ]; then
+		mkdir -p /tmp/atvb_diag
+		cp "$atvb_src/diag/atvdiag.sh" /tmp/atvb_diag/atvdiag.sh
+		cat > /tmp/atvb_diag/atvdiag.rc <<-'ATVB_EOF'
+		service atvdiag /system/bin/sh /system/etc/init/atvdiag.sh
+		    user root
+		    group root
+		    seclabel u:r:shell:s0
+		    oneshot
+		    disabled
+
+		on property:sys.boot_completed=1
+		    start atvdiag
+		ATVB_EOF
+		chmod 644 /tmp/atvb_diag/*
+		if mount -t overlay overlay -o ro,lowerdir=/tmp/atvb_diag:"$atvb_initdir" "$atvb_initdir"; then
+			atvb_log "releves de diagnostic programmes (service atvdiag)"
+		else
+			atvb_log "echec de l'ajout du service de diagnostic"
+		fi
+	fi
+
 	# --- Applications système greffées (ex. services Google TV) ---------------
 	# gapps.sfs (squashfs) reprend l'arborescence du système (product/priv-app,
 	# product/etc, system_ext/priv-app, etc/permissions...). Chaque dossier de 2e
