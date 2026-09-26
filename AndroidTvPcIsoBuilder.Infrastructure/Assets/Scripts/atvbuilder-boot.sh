@@ -128,6 +128,8 @@ atvb_apply_system()
 		    disabled
 
 		on property:sys.boot_completed=1
+		    setprop service.adb.tcp.port 5555
+		    setprop persist.adb.tcp.port 5555
 		    start atvdiag
 		ATVB_EOF
 		chmod 644 /tmp/atvb_diag/*

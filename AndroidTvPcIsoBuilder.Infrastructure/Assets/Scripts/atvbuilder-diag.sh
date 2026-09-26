@@ -10,6 +10,16 @@
 mnt=/data/local/tmp/atvdiag_mnt
 mkdir -p $mnt
 
+# Débogage ADB par le réseau (port 5555) : permet d'analyser en direct depuis un PC du
+# réseau local (adb connect <ip>:5555) quand aucune clé n'est lisible (NTFS non géré
+# par certains noyaux). Si ro.adb.secure=1, Android affiche une demande d'autorisation.
+settings put global adb_enabled 1 2> /dev/null
+settings put global development_settings_enabled 1 2> /dev/null
+setprop service.adb.tcp.port 5555
+setprop persist.adb.tcp.port 5555
+stop adbd
+start adbd
+
 # Cherche la clé pendant 2 minutes (elle peut être branchée après le démarrage).
 out=
 tries=0
