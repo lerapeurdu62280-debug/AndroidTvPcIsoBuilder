@@ -148,4 +148,49 @@ public class BootAnimationGeneratorTests
         Assert.AreEqual(4, CountFrames("part0")); // 1 seconde d'intro
         Assert.AreEqual(8, CountFrames("part1")); // FrameRate x DurationSeconds
     }
+
+    [TestMethod]
+    public async Task GenerateSplashImageAsync_PleinEcranSansArrierePlan_RemplitLEcranEtEffaceLeDecor()
+    {
+        // Image 16:9 façon "fond d'écran" : fond bleu nuit, élément de décor estompé à gauche,
+        // logo vert vif au centre.
+        const int width = 320, height = 180;
+        var pixels = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                (byte r, byte g, byte b) color = (7, 16, 21);
+                if (x is >= 20 and < 80 && y is >= 30 and < 60) color = (40, 40, 45);      // décor estompé
+                if (x is >= 130 and < 190 && y is >= 60 and < 120) color = (61, 220, 132); // logo
+                var i = (y * width + x) * 4;
+                (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]) = (color.b, color.g, color.r, 255);
+            }
+        var imagePath = Path.Combine(_outputDirectory, "fond.png");
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(System.Windows.Media.Imaging.BitmapSource.Create(
+            width, height, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, width * 4)));
+        await using (var file = File.Create(imagePath))
+            encoder.Save(file);
+
+        var config = new BootAnimationConfig { SourceImagePath = imagePath, FullScreen = true, RemoveBackground = true };
+        var result = await new BootAnimationGenerator().GenerateSplashImageAsync(config, _outputDirectory);
+
+        Assert.IsTrue(result.IsSuccess, string.Join(" ", result.Errors));
+        var bytes = await File.ReadAllBytesAsync(result.Value);
+        int splashWidth = BitConverter.ToUInt16(bytes, 4), splashHeight = BitConverter.ToUInt16(bytes, 6);
+        Assert.AreEqual(1920, splashWidth);
+        Assert.AreEqual(1080, splashHeight);
+        Assert.AreEqual(0x8000 | 1000, BitConverter.ToUInt16(bytes, 10), "Le drapeau plein écran doit être posé pour atvsplash.");
+
+        (byte R, byte G, byte B) Pixel(int x, int y)
+        {
+            var i = 12 + (y * splashWidth + x) * 3;
+            return (bytes[i], bytes[i + 1], bytes[i + 2]);
+        }
+        // Image agrandie x6 : coordonnées source x6.
+        Assert.AreEqual((0, 0, 0), ((int, int, int))Pixel(10, 10), "Le fond doit devenir noir.");
+        Assert.AreEqual((0, 0, 0), ((int, int, int))Pixel(50 * 6, 45 * 6), "Le décor estompé doit disparaître.");
+        var logo = Pixel(160 * 6, 90 * 6);
+        Assert.IsTrue(logo.G > 200 && logo.R is > 50 and < 75, $"Le logo doit rester intact, obtenu {logo}.");
+    }
 }

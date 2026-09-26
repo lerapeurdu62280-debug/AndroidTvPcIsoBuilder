@@ -19,7 +19,8 @@
  *
  * Format du fichier logo (little-endian) :
  *   "ATVS" | u16 largeur | u16 hauteur | u16 cycle_ms | u16 fondu_ms | largeur*hauteur*3 octets RGB
- *   (logo déjà composé sur fond noir, à pleine luminosité).
+ *   (logo déjà composé sur fond noir, à pleine luminosité). Bit 15 de fondu_ms = plein écran :
+ *   l'image couvre tout l'écran (bords coupés si les proportions diffèrent).
  *
  * Compilation : voir build-atvsplash.sh (gcc -static sous WSL).
  */
@@ -46,7 +47,7 @@
 #define MAX_RUNTIME_MS (30 * 60 * 1000)
 
 struct logo {
-	int width, height, cycle_ms, fade_ms;
+	int width, height, cycle_ms, fade_ms, fullscreen;
 	unsigned char *rgb;
 };
 
@@ -59,6 +60,8 @@ struct fb {
 	int bytes_per_pixel;
 	/* Zone du logo à l'écran (après mise à l'échelle éventuelle). */
 	int dst_x, dst_y, dst_w, dst_h;
+	/* Partie de l'image affichée (recadrage du mode plein écran). */
+	int src_x, src_y, src_w, src_h;
 	unsigned char *row;
 };
 
@@ -106,6 +109,8 @@ static int load_logo(const char *path, struct logo *logo)
 	logo->height = (int)read_u16(header + 6);
 	logo->cycle_ms = (int)read_u16(header + 8);
 	logo->fade_ms = (int)read_u16(header + 10);
+	logo->fullscreen = (logo->fade_ms & 0x8000) != 0;
+	logo->fade_ms &= 0x7FFF;
 	size_t size = (size_t)logo->width * (size_t)logo->height * 3;
 	if (logo->width <= 0 || logo->height <= 0 || logo->cycle_ms <= 0) {
 		fclose(f);
@@ -187,14 +192,34 @@ static int fb_open(struct fb *fb, const struct logo *logo)
 
 	/* Taille réelle du logo (comme la bootanimation, affichée à l'échelle 1), réduite
 	 * seulement si l'écran est plus petit que le logo. */
-	double scale = 1.0;
-	double max_w = fb->var.xres * 0.9, max_h = fb->var.yres * 0.9;
-	if (logo->width > max_w)
-		scale = max_w / logo->width;
-	if (logo->height * scale > max_h)
-		scale = max_h / logo->height;
-	fb->dst_w = (int)(logo->width * scale);
-	fb->dst_h = (int)(logo->height * scale);
+	fb->src_x = 0;
+	fb->src_y = 0;
+	fb->src_w = logo->width;
+	fb->src_h = logo->height;
+	if (logo->fullscreen) {
+		/* Couvrir tout l'écran : agrandir jusqu'à remplir, couper ce qui dépasse. */
+		double sx = (double)fb->var.xres / logo->width, sy = (double)fb->var.yres / logo->height;
+		double scale = sx > sy ? sx : sy;
+		fb->src_w = (int)(fb->var.xres / scale);
+		fb->src_h = (int)(fb->var.yres / scale);
+		if (fb->src_w > logo->width) fb->src_w = logo->width;
+		if (fb->src_h > logo->height) fb->src_h = logo->height;
+		if (fb->src_w < 1) fb->src_w = 1;
+		if (fb->src_h < 1) fb->src_h = 1;
+		fb->src_x = (logo->width - fb->src_w) / 2;
+		fb->src_y = (logo->height - fb->src_h) / 2;
+		fb->dst_w = (int)fb->var.xres;
+		fb->dst_h = (int)fb->var.yres;
+	} else {
+		double scale = 1.0;
+		double max_w = fb->var.xres * 0.9, max_h = fb->var.yres * 0.9;
+		if (logo->width > max_w)
+			scale = max_w / logo->width;
+		if (logo->height * scale > max_h)
+			scale = max_h / logo->height;
+		fb->dst_w = (int)(logo->width * scale);
+		fb->dst_h = (int)(logo->height * scale);
+	}
 	if (fb->dst_w < 1) fb->dst_w = 1;
 	if (fb->dst_h < 1) fb->dst_h = 1;
 	fb->dst_x = ((int)fb->var.xres - fb->dst_w) / 2;
@@ -250,11 +275,11 @@ static void draw_logo(struct fb *fb, const struct logo *logo, unsigned brightnes
 		int screen_y = fb->dst_y + y;
 		if (screen_y < 0 || screen_y >= (int)fb->var.yres)
 			continue;
-		int src_y = (int)((long)y * logo->height / fb->dst_h);
+		int src_y = fb->src_y + (int)((long)y * fb->src_h / fb->dst_h);
 		const unsigned char *src_row = logo->rgb + (size_t)src_y * logo->width * 3;
 		unsigned char *out = fb->row;
 		for (int x = 0; x < fb->dst_w; x++) {
-			int src_x = (int)((long)x * logo->width / fb->dst_w);
+			int src_x = fb->src_x + (int)((long)x * fb->src_w / fb->dst_w);
 			const unsigned char *p = src_row + src_x * 3;
 			uint32_t v = pack_pixel(&fb->var, (p[0] * brightness) >> 8, (p[1] * brightness) >> 8, (p[2] * brightness) >> 8);
 			out[0] = (unsigned char)v;

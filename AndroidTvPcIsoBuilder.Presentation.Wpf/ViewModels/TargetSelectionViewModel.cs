@@ -30,6 +30,12 @@ public partial class TargetSelectionViewModel : ObservableObject
     [ObservableProperty]
     private string? _customLogoPath;
 
+    [ObservableProperty]
+    private bool _logoFullScreen = true;
+
+    [ObservableProperty]
+    private bool _logoRemoveBackground = true;
+
     /// <summary>Chemin local de l'ISO une fois téléchargée/importée via le sous-dialogue (DownloadIsoWindow).</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(NextCommand))]
@@ -54,7 +60,11 @@ public partial class TargetSelectionViewModel : ObservableObject
     public SourceIsoSelection BuildSourceIsoSelection() => new()
     {
         SourceId = SelectedSource?.Id,
-        DisplayName = SelectedSource?.DisplayName,
+        // Le fichier importé peut être n'importe quelle ISO (pas forcément celle du catalogue
+        // sélectionné) : on affiche son vrai nom plutôt qu'un libellé de catalogue trompeur.
+        DisplayName = string.IsNullOrEmpty(ImportedIsoLocalPath)
+            ? SelectedSource?.DisplayName
+            : System.IO.Path.GetFileName(ImportedIsoLocalPath),
         LocalPath = ImportedIsoLocalPath,
         Sha256 = SelectedSource?.Sha256,
     };
@@ -66,6 +76,8 @@ public partial class TargetSelectionViewModel : ObservableObject
     public BootAnimationConfig BuildBootAnimationConfig() => new()
     {
         SourceImagePath = CustomLogoPath,
+        FullScreen = LogoFullScreen,
+        RemoveBackground = LogoRemoveBackground,
     };
 
     [RelayCommand]

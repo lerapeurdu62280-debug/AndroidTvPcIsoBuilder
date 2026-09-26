@@ -34,6 +34,14 @@ public class BootAnimationGenerator : IBootAnimationGenerator
     private const int FrameHeight = 720;
     private const double MaxLogoWidth = 900;
     private const double MaxLogoHeight = 420;
+
+    // Plein écran : le lecteur bootanimation d'Android affiche les frames à l'échelle 1,
+    // centrées. Des frames 1920x1080 remplissent donc une TV Full HD (cas le plus courant).
+    private const int FullScreenFrameWidth = 1920;
+    private const int FullScreenFrameHeight = 1080;
+
+    /// <summary>Bit posé dans le champ "fondu_ms" du fichier ATVS : atvsplash remplit l'écran.</summary>
+    private const ushort SplashFullScreenFlag = 0x8000;
     private const string DefaultLogoResourceName = "AndroidTvPcIsoBuilder.Infrastructure.Assets.BootAnimation.androidtv-logo.png";
 
     public async Task<Result<string>> GenerateAsync(BootAnimationConfig config, string outputDirectory, CancellationToken cancellationToken = default)
@@ -49,6 +57,10 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             Directory.CreateDirectory(loopDirectory);
 
             var logo = LoadLogo(config);
+            var fullScreen = IsFullScreen(config);
+            var (frameWidth, frameHeight) = fullScreen
+                ? (FullScreenFrameWidth, FullScreenFrameHeight)
+                : (FrameWidth, FrameHeight);
 
             // Fondu d'entrée : opacité 0 -> 1 et échelle 0.95 -> 1.0 sur une seconde.
             var introFrameCount = Math.Max(1, config.FrameRate);
@@ -57,7 +69,7 @@ public class BootAnimationGenerator : IBootAnimationGenerator
                 cancellationToken.ThrowIfCancellationRequested();
                 var progress = (frameIndex + 1) / (double)introFrameCount;
                 var eased = 1 - Math.Pow(1 - progress, 3);
-                var frame = RenderFrame(logo, eased, 0.95 + 0.05 * eased);
+                var frame = RenderFrame(logo, fullScreen, frameWidth, frameHeight, eased, 0.95 + 0.05 * eased);
                 await SavePngAsync(frame, Path.Combine(introDirectory, $"{frameIndex:D5}.png"), cancellationToken);
             }
 
@@ -67,7 +79,7 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var wave = (1 + Math.Cos(2 * Math.PI * frameIndex / loopFrameCount)) / 2; // 1 -> 0 -> 1
-                var frame = RenderFrame(logo, 0.8 + 0.2 * wave, 1.0 + 0.015 * wave);
+                var frame = RenderFrame(logo, fullScreen, frameWidth, frameHeight, 0.8 + 0.2 * wave, 1.0 + 0.015 * wave);
                 await SavePngAsync(frame, Path.Combine(loopDirectory, $"{frameIndex:D5}.png"), cancellationToken);
             }
 
@@ -76,7 +88,7 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             // partie "p <count> <pause> <folder>". part0 est jouée une fois (count=1), part1 en
             // boucle (count=0) jusqu'à la fin du démarrage : un logo figé ou un fondu qui recommence
             // en boucle donnerait l'impression d'un écran bloqué ou qui clignote.
-            var descContent = $"{FrameWidth} {FrameHeight} {config.FrameRate}\np 1 0 part0\np 0 0 part1\n";
+            var descContent = $"{frameWidth} {frameHeight} {config.FrameRate}\np 1 0 part0\np 0 0 part1\n";
             await File.WriteAllTextAsync(descPath, descContent, cancellationToken);
 
             var zipPath = Path.Combine(outputDirectory, "bootanimation.zip");
@@ -109,15 +121,31 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             Directory.CreateDirectory(outputDirectory);
 
             var logo = LoadLogo(config);
-            var (logoWidth, logoHeight) = GetLogoSize(logo);
-            var width = Math.Max(1, (int)Math.Round(logoWidth));
-            var height = Math.Max(1, (int)Math.Round(logoHeight));
+            var fullScreen = IsFullScreen(config);
+            int width, height;
+            Rect logoRect;
+            if (fullScreen)
+            {
+                // Image à la taille des frames plein écran : atvsplash l'étire ensuite à la
+                // taille réelle du framebuffer (recadrée si ses proportions diffèrent).
+                (width, height) = (FullScreenFrameWidth, FullScreenFrameHeight);
+                logoRect = GetCoverRect(logo, width, height);
+            }
+            else
+            {
+                var (logoWidth, logoHeight) = GetLogoSize(logo);
+                width = Math.Max(1, (int)Math.Round(logoWidth));
+                height = Math.Max(1, (int)Math.Round(logoHeight));
+                logoRect = new Rect(0, 0, width, height);
+            }
 
             var visual = new DrawingVisual();
             using (var context = visual.RenderOpen())
             {
                 context.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
-                context.DrawImage(logo, new Rect(0, 0, width, height));
+                context.PushClip(new RectangleGeometry(new Rect(0, 0, width, height)));
+                context.DrawImage(logo, logoRect);
+                context.Pop();
             }
 
             var renderTarget = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
@@ -136,7 +164,7 @@ public class BootAnimationGenerator : IBootAnimationGenerator
             writer.Write((ushort)width);
             writer.Write((ushort)height);
             writer.Write((ushort)cycleMilliseconds);
-            writer.Write((ushort)fadeMilliseconds);
+            writer.Write((ushort)(fadeMilliseconds | (fullScreen ? SplashFullScreenFlag : 0)));
 
             var rgb = new byte[width * height * 3];
             for (int source = 0, target = 0; source < bgra.Length; source += 4, target += 3)
@@ -156,10 +184,104 @@ public class BootAnimationGenerator : IBootAnimationGenerator
         }
     }
 
-    private static BitmapSource LoadLogo(BootAnimationConfig config) =>
-        !string.IsNullOrWhiteSpace(config.SourceImagePath) && File.Exists(config.SourceImagePath)
-            ? LoadSourceImage(config.SourceImagePath)
-            : LoadDefaultLogo();
+    private static bool HasCustomImage(BootAnimationConfig config) =>
+        !string.IsNullOrWhiteSpace(config.SourceImagePath) && File.Exists(config.SourceImagePath);
+
+    private static bool IsFullScreen(BootAnimationConfig config) => config.FullScreen && HasCustomImage(config);
+
+    private static BitmapSource LoadLogo(BootAnimationConfig config)
+    {
+        if (!HasCustomImage(config))
+            return LoadDefaultLogo();
+
+        var image = LoadSourceImage(config.SourceImagePath!);
+        return config.RemoveBackground ? RemoveBackground(image) : image;
+    }
+
+    /// <summary>
+    /// Rectangle où dessiner l'image pour qu'elle couvre toute la zone en gardant ses
+    /// proportions (les bords qui dépassent sont coupés), centré.
+    /// </summary>
+    private static Rect GetCoverRect(BitmapSource image, double width, double height)
+    {
+        var ratio = Math.Max(width / image.PixelWidth, height / image.PixelHeight);
+        var drawWidth = image.PixelWidth * ratio;
+        var drawHeight = image.PixelHeight * ratio;
+        return new Rect((width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+    }
+
+    /// <summary>
+    /// Détourage automatique : le fond est la couleur médiane du bord de l'image ; chaque
+    /// pixel est gardé selon son écart à cette couleur. Les 75 % de pixels les plus proches
+    /// du fond (décor, dégradés, éléments estompés) passent au noir ; au-delà, une transition
+    /// douce conserve les halos lumineux du logo sans liseré. Résultat composé sur fond noir.
+    /// </summary>
+    internal static BitmapSource RemoveBackground(BitmapSource image)
+    {
+        var source = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        int width = source.PixelWidth, height = source.PixelHeight, stride = width * 4;
+        var pixels = new byte[stride * height];
+        source.CopyPixels(pixels, stride, 0);
+
+        // Composer d'abord sur noir (images PNG avec transparence).
+        for (var i = 0; i < pixels.Length; i += 4)
+        {
+            var alpha = pixels[i + 3];
+            for (var c = 0; c < 3; c++)
+                pixels[i + c] = (byte)(pixels[i + c] * alpha / 255);
+            pixels[i + 3] = 255;
+        }
+
+        var background = MedianBorderColor(pixels, width, height);
+
+        var distances = new byte[width * height];
+        var histogram = new int[256];
+        for (int i = 0, p = 0; p < distances.Length; i += 4, p++)
+        {
+            var distance = Math.Max(Math.Abs(pixels[i] - background[0]),
+                Math.Max(Math.Abs(pixels[i + 1] - background[1]), Math.Abs(pixels[i + 2] - background[2])));
+            distances[p] = (byte)distance;
+            histogram[distance]++;
+        }
+
+        var percentile75 = 0;
+        for (int cumulated = 0, target = distances.Length * 3 / 4; percentile75 < 255; percentile75++)
+        {
+            cumulated += histogram[percentile75];
+            if (cumulated >= target)
+                break;
+        }
+
+        // Plancher de 45 : sur un fond uni (sans bruit), le décor estompé doit aussi disparaître.
+        double low = Math.Max(percentile75 + 20, 45), high = low + 40;
+        for (int i = 0, p = 0; p < distances.Length; i += 4, p++)
+        {
+            var t = Math.Clamp((distances[p] - low) / (high - low), 0, 1);
+            var keep = t * t * (3 - 2 * t);
+            for (var c = 0; c < 3; c++)
+                pixels[i + c] = (byte)(pixels[i + c] * keep);
+        }
+
+        var result = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        result.Freeze();
+        return result;
+    }
+
+    private static byte[] MedianBorderColor(byte[] pixels, int width, int height)
+    {
+        var border = new List<int>();
+        void Add(int x, int y) => border.Add((y * width + x) * 4);
+        for (var x = 0; x < width; x++) { Add(x, 0); Add(x, height - 1); }
+        for (var y = 1; y < height - 1; y++) { Add(0, y); Add(width - 1, y); }
+
+        var color = new byte[3];
+        for (var c = 0; c < 3; c++)
+        {
+            var values = border.Select(offset => pixels[offset + c]).Order().ToList();
+            color[c] = values[values.Count / 2];
+        }
+        return color;
+    }
 
     /// <summary>
     /// Taille du logo dans une frame : réduit si besoin pour tenir dans
@@ -201,27 +323,36 @@ public class BootAnimationGenerator : IBootAnimationGenerator
     /// <see cref="MaxLogoWidth"/> x <see cref="MaxLogoHeight"/> (jamais agrandi au-delà de sa
     /// taille d'origine), avec l'opacité et l'échelle de la frame.
     /// </summary>
-    private static RenderTargetBitmap RenderFrame(BitmapSource logo, double opacity, double scale)
+    private static RenderTargetBitmap RenderFrame(BitmapSource logo, bool fullScreen, int frameWidth, int frameHeight, double opacity, double scale)
     {
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen())
         {
-            context.DrawRectangle(Brushes.Black, null, new Rect(0, 0, FrameWidth, FrameHeight));
+            context.DrawRectangle(Brushes.Black, null, new Rect(0, 0, frameWidth, frameHeight));
 
-            var centerX = FrameWidth / 2.0;
-            var centerY = FrameHeight / 2.0;
+            var centerX = frameWidth / 2.0;
+            var centerY = frameHeight / 2.0;
 
+            context.PushClip(new RectangleGeometry(new Rect(0, 0, frameWidth, frameHeight)));
             context.PushOpacity(opacity);
             context.PushTransform(new ScaleTransform(scale, scale, centerX, centerY));
 
-            var (width, height) = GetLogoSize(logo);
-            context.DrawImage(logo, new Rect(centerX - width / 2, centerY - height / 2, width, height));
+            if (fullScreen)
+            {
+                context.DrawImage(logo, GetCoverRect(logo, frameWidth, frameHeight));
+            }
+            else
+            {
+                var (width, height) = GetLogoSize(logo);
+                context.DrawImage(logo, new Rect(centerX - width / 2, centerY - height / 2, width, height));
+            }
 
             context.Pop(); // ScaleTransform
             context.Pop(); // Opacity
+            context.Pop(); // Clip
         }
 
-        var renderTarget = new RenderTargetBitmap(FrameWidth, FrameHeight, 96, 96, PixelFormats.Pbgra32);
+        var renderTarget = new RenderTargetBitmap(frameWidth, frameHeight, 96, 96, PixelFormats.Pbgra32);
         renderTarget.Render(visual);
         renderTarget.Freeze();
         return renderTarget;
